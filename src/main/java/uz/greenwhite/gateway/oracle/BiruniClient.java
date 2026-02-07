@@ -113,9 +113,17 @@ public class BiruniClient {
     @lombok.NoArgsConstructor
     @lombok.AllArgsConstructor
     public static class ResponseSaveRequest {
+        
+        @com.fasterxml.jackson.annotation.JsonProperty("company_id")
         private Long companyId;
+        
+        @com.fasterxml.jackson.annotation.JsonProperty("request_id")
         private Long requestId;
+        
+        @com.fasterxml.jackson.annotation.JsonProperty("response")
         private ResponseData response;
+        
+        @com.fasterxml.jackson.annotation.JsonProperty("error_message")
         private String errorMessage;
 
         @lombok.Data
@@ -123,8 +131,14 @@ public class BiruniClient {
         @lombok.NoArgsConstructor
         @lombok.AllArgsConstructor
         public static class ResponseData {
+            
+            @com.fasterxml.jackson.annotation.JsonProperty("status")
             private int status;
+            
+            @com.fasterxml.jackson.annotation.JsonProperty("content_type")
             private String contentType;
+            
+            @com.fasterxml.jackson.annotation.JsonProperty("body")
             private Object body;
         }
     }

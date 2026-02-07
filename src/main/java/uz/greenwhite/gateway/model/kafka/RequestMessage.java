@@ -1,52 +1,64 @@
 package uz.greenwhite.gateway.model.kafka;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import uz.greenwhite.gateway.util.StringToMapDeserializer;
 
 import java.time.LocalDateTime;
 import java.util.Map;
 
-/**
- * Kafka message for new requests (bmb.request.new topic)
- */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class RequestMessage {
 
+    @JsonProperty("company_id")
     private Long companyId;
+
+    @JsonProperty("request_id")
     private Long requestId;
+
+    @JsonProperty("filial_id")
     private Long filialId;
+
+    @JsonProperty("endpoint_id")
     private Long endpointId;
 
-    // HTTP details
+    @JsonProperty("base_url")
     private String baseUrl;
+
     private String uri;
     private String params;
     private String method;
+
+    @JsonProperty("headers")
+    @JsonDeserialize(using = StringToMapDeserializer.class)
     private Map<String, String> headers;
+
     private String body;
 
-    // OAuth2
+    @JsonProperty("oauth2_provider")
     private String oauth2Provider;
 
-    // Callback
+    @JsonProperty("callback_procedure")
     private String callbackProcedure;
 
-    // Metadata
+    @JsonProperty("project_code")
     private String projectCode;
+
+    @JsonProperty("source_table")
     private String sourceTable;
+
+    @JsonProperty("source_id")
     private Long sourceId;
 
-    // Timestamps
     private LocalDateTime createdAt;
 
-    /**
-     * Composite ID for Kafka key
-     */
     public String getCompositeId() {
         return companyId + ":" + requestId;
     }

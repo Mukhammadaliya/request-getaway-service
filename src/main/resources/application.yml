@@ -57,13 +57,21 @@ gateway:
     write-timeout-ms: 30000
   retry:
     max-attempts: 3
-    backoff-ms: 5000
+    interval-ms: 3000
+    retryable-statuses: 408,429,500,502,503,504
   kafka:
     topics:
       request-new: bmb.request.new
       request-response: bmb.request.response
       request-callback: bmb.request.callback
       request-dlq: bmb.request.dlq
+  biruni:
+    base-url: http://localhost:8080/smartup24/
+    username: admin@head
+    password: greenwhite
+    request-pull-uri: /b/biruni/bmb/requests$pull
+    response-save-uri: /b/biruni/bmb/requests$save
+    connection-timeout: 60
 
 # Logging
 logging:

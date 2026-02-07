@@ -6,6 +6,7 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Service;
+import uz.greenwhite.gateway.config.RetryProperties;
 import uz.greenwhite.gateway.http.HttpRequestService;
 import uz.greenwhite.gateway.kafka.producer.RequestProducer;
 import uz.greenwhite.gateway.model.enums.ErrorSource;
@@ -22,8 +23,7 @@ public class RequestConsumer {
     private final HttpRequestService httpRequestService;
     private final RequestStateService requestStateService;
     private final RequestProducer requestProducer;
-
-    private static final int MAX_RETRY_ATTEMPTS = 3;
+    private final RetryProperties retryProperties;
 
     /**
      * Consume new requests from Kafka and send HTTP requests
@@ -41,14 +41,14 @@ public class RequestConsumer {
                 key, record.partition(), record.offset());
 
         try {
-            // 1. Check if already completed (idempotency)
+            // 1. Idempotency check - already completed?
             if (requestStateService.isCompleted(key)) {
                 log.warn("Request already completed, skipping: {}", key);
                 ack.acknowledge();
                 return;
             }
 
-            // 2. Try to acquire lock
+            // 2. Concurrency check - acquire lock
             if (!requestStateService.tryLock(key)) {
                 log.warn("Request is being processed by another instance: {}", key);
                 ack.acknowledge();
@@ -56,31 +56,10 @@ public class RequestConsumer {
             }
 
             try {
-                // 3. Create or get state
-                requestStateService.createInitialState(key);
-
-                // 4. Update status to SENT
-                requestStateService.updateStatus(key, RequestStatus.SENT);
-
-                // 5. Send HTTP request
-                ResponseMessage response = httpRequestService.sendRequest(message).block();
-
-                // 6. Check response
-                if (response != null && response.isSuccess()) {
-                    // Success - send to response topic
-                    requestProducer.sendResponse(response);
-                    requestStateService.updateStatus(key, RequestStatus.COMPLETED);
-                    log.info("Request processed successfully: {}", key);
-                } else {
-                    // Error - check if retryable
-                    handleFailedResponse(key, message, response);
-                }
-
-                // 7. Acknowledge
+                processRequest(key, message);
                 ack.acknowledge();
 
             } finally {
-                // Release lock
                 requestStateService.releaseLock(key);
             }
 
@@ -91,20 +70,55 @@ public class RequestConsumer {
     }
 
     /**
+     * Process single request
+     */
+    private void processRequest(String key, RequestMessage message) {
+        // 1. Create initial state
+        requestStateService.createInitialState(key);
+
+        // 2. Update status to SENT
+        requestStateService.updateStatus(key, RequestStatus.SENT);
+
+        // 3. Send HTTP request
+        ResponseMessage response = httpRequestService.sendRequest(message).block();
+
+        // 4. Handle response
+        if (response != null && response.isSuccess()) {
+            handleSuccess(key, response);
+        } else {
+            handleFailedResponse(key, message, response);
+        }
+    }
+
+    /**
+     * Handle successful response
+     */
+    private void handleSuccess(String key, ResponseMessage response) {
+        requestProducer.sendResponse(response);
+        requestStateService.updateStatus(key, RequestStatus.COMPLETED);
+        log.info("Request processed successfully: {}", key);
+    }
+
+    /**
      * Handle failed HTTP response
      */
     private void handleFailedResponse(String key, RequestMessage message, ResponseMessage response) {
         int attemptCount = requestStateService.incrementAttempt(key);
+        int httpStatus = response != null ? response.getHttpStatus() : 0;
+        String errorMessage = response != null ? response.getErrorMessage() : "Unknown error";
 
-        if (response != null && response.isRetryable() && attemptCount < MAX_RETRY_ATTEMPTS) {
-            log.warn("Retryable error for {}, attempt {}/{}", key, attemptCount, MAX_RETRY_ATTEMPTS);
-            // Re-send to retry topic or just let Kafka redeliver
+        // Check if retryable and attempts remaining
+        boolean isRetryable = retryProperties.isRetryable(httpStatus);
+        boolean hasAttemptsLeft = attemptCount < retryProperties.getMaxAttempts();
+
+        if (isRetryable && hasAttemptsLeft) {
+            log.warn("Retryable error for {}: status={}, attempt {}/{}",
+                    key, httpStatus, attemptCount, retryProperties.getMaxAttempts());
+            // Message will be redelivered by Kafka (no ack)
+            throw new RuntimeException("Retryable error: " + errorMessage);
         } else {
-            // Max retries exceeded or non-retryable error
-            String error = response != null ? response.getErrorMessage() : "Unknown error";
-            requestStateService.markFailed(key, error, ErrorSource.HTTP);
-            requestProducer.sendToDlq(key, message, error);
-            log.error("Request failed permanently: {} - {}", key, error);
+            // Permanent failure
+            handlePermanentFailure(key, message, httpStatus, errorMessage, ErrorSource.HTTP);
         }
     }
 
@@ -114,13 +128,29 @@ public class RequestConsumer {
     private void handleException(String key, RequestMessage message, Exception e, Acknowledgment ack) {
         int attemptCount = requestStateService.incrementAttempt(key);
 
-        if (attemptCount < MAX_RETRY_ATTEMPTS) {
-            log.warn("Exception for {}, attempt {}/{}, will retry", key, attemptCount, MAX_RETRY_ATTEMPTS);
-            // Don't acknowledge - message will be redelivered
+        if (attemptCount < retryProperties.getMaxAttempts()) {
+            log.warn("Exception for {}, attempt {}/{}, will retry",
+                    key, attemptCount, retryProperties.getMaxAttempts());
+            // Don't acknowledge - Kafka will redeliver
         } else {
-            requestStateService.markFailed(key, e.getMessage(), ErrorSource.SYSTEM);
-            requestProducer.sendToDlq(key, message, e.getMessage());
-            ack.acknowledge(); // Acknowledge to prevent infinite loop
+            handlePermanentFailure(key, message, 0, e.getMessage(), ErrorSource.SYSTEM);
+            ack.acknowledge(); // Prevent infinite loop
         }
+    }
+
+    /**
+     * Handle permanent failure - send to DLQ and mark as failed
+     */
+    private void handlePermanentFailure(String key, RequestMessage message,
+                                        int httpStatus, String errorMessage, ErrorSource source) {
+        log.error("Request failed permanently: {} - status={}, error={}", key, httpStatus, errorMessage);
+
+        // 1. Mark as failed in Redis
+        requestStateService.markFailed(key, errorMessage, source);
+
+        // 2. Send to DLQ for analysis
+        requestProducer.sendToDlq(key, message, errorMessage);
+
+        // 3. TODO: Send error response to Oracle (E5 da qilamiz)
     }
 }
