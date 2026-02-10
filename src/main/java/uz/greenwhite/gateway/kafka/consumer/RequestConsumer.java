@@ -1,5 +1,6 @@
 package uz.greenwhite.gateway.kafka.consumer;
 
+import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -10,6 +11,7 @@ import org.springframework.stereotype.Service;
 import uz.greenwhite.gateway.config.RetryProperties;
 import uz.greenwhite.gateway.http.HttpRequestService;
 import uz.greenwhite.gateway.kafka.producer.RequestProducer;
+import uz.greenwhite.gateway.metrics.GatewayMetrics;
 import uz.greenwhite.gateway.model.enums.ErrorSource;
 import uz.greenwhite.gateway.model.enums.RequestStatus;
 import uz.greenwhite.gateway.model.kafka.RequestMessage;
@@ -27,23 +29,23 @@ public class RequestConsumer {
     private final RequestProducer requestProducer;
     private final RetryProperties retryProperties;
     private final ThreadPoolTaskExecutor httpExecutor;
+    private final GatewayMetrics metrics;
 
     public RequestConsumer(
             HttpRequestService httpRequestService,
             RequestStateService requestStateService,
             RequestProducer requestProducer,
             RetryProperties retryProperties,
-            @Qualifier("httpRequestExecutor") ThreadPoolTaskExecutor httpExecutor) {
+            @Qualifier("httpRequestExecutor") ThreadPoolTaskExecutor httpExecutor,
+            GatewayMetrics metrics) {
         this.httpRequestService = httpRequestService;
         this.requestStateService = requestStateService;
         this.requestProducer = requestProducer;
         this.retryProperties = retryProperties;
         this.httpExecutor = httpExecutor;
+        this.metrics = metrics;
     }
 
-    /**
-     * Consume new requests from Kafka and delegate HTTP work to thread pool
-     */
     @KafkaListener(
             id = "requestConsumer",
             topics = "${gateway.kafka.topics.request-new}",
@@ -57,10 +59,14 @@ public class RequestConsumer {
         log.info("Received request: {} [partition={}, offset={}]",
                 key, record.partition(), record.offset());
 
+        // ===== E3: Consumer received =====
+        metrics.getConsumerReceived().increment();
+
         try {
             // 1. Idempotency check
             if (requestStateService.isCompleted(key)) {
                 log.warn("Request already completed, skipping: {}", key);
+                metrics.getConsumerSkippedDuplicate().increment();
                 ack.acknowledge();
                 return;
             }
@@ -68,6 +74,7 @@ public class RequestConsumer {
             // 2. Concurrency lock
             if (!requestStateService.tryLock(key)) {
                 log.warn("Request is being processed by another instance: {}", key);
+                metrics.getConsumerLockFailed().increment();
                 ack.acknowledge();
                 return;
             }
@@ -87,7 +94,6 @@ public class RequestConsumer {
                     log.error("Unexpected error in async processing for {}: {}",
                             key, throwable.getMessage(), throwable);
                 }
-                // Acknowledge after processing (success or permanent failure)
                 ack.acknowledge();
             });
 
@@ -108,13 +114,38 @@ public class RequestConsumer {
         // 2. Update status to SENT
         requestStateService.updateStatus(key, RequestStatus.SENT);
 
-        // 3. Send HTTP request
-        ResponseMessage response = httpRequestService.sendRequest(message).block();
+        // ===== E4: HTTP Request with Timer =====
+        Timer.Sample httpSample = Timer.start(metrics.getRegistry());
+
+        ResponseMessage response;
+        try {
+            response = httpRequestService.sendRequest(message).block();
+        } catch (Exception e) {
+            httpSample.stop(metrics.getHttpRequestTimer());
+
+            // Timeout yoki connection error?
+            if (isTimeoutException(e)) {
+                metrics.recordHttpTimeout();
+                log.error("E4: HTTP timeout for {}: {}", key, e.getMessage());
+            } else {
+                metrics.getHttpError5xx().increment();
+                log.error("E4: HTTP exception for {}: {}", key, e.getMessage());
+            }
+
+            handleFailedProcessing(key, message, e);
+            return;
+        }
+
+        httpSample.stop(metrics.getHttpRequestTimer());
 
         // 4. Handle response
         if (response != null && response.isSuccess()) {
+            metrics.getHttpSuccess().increment();
             handleSuccess(key, response);
         } else {
+            // ===== E4: Record HTTP error by status code =====
+            int httpStatus = response != null ? response.getHttpStatus() : 0;
+            metrics.recordHttpResult(httpStatus);
             handleFailedResponse(key, message, response);
         }
     }
@@ -134,9 +165,10 @@ public class RequestConsumer {
         boolean hasAttemptsLeft = attemptCount < retryProperties.getMaxAttempts();
 
         if (isRetryable && hasAttemptsLeft) {
-            log.warn("Retryable error for {}: status={}, attempt {}/{}",
+            // ===== E4: Retry metric =====
+            metrics.getHttpRetry().increment();
+            log.warn("E4: Retryable error for {}: status={}, attempt {}/{}",
                     key, httpStatus, attemptCount, retryProperties.getMaxAttempts());
-            // Re-send to Kafka for retry (instead of blocking consumer thread)
             requestProducer.sendRequest(message);
         } else {
             handlePermanentFailure(key, message, httpStatus, errorMessage, ErrorSource.HTTP);
@@ -147,7 +179,8 @@ public class RequestConsumer {
         int attemptCount = requestStateService.incrementAttempt(key);
 
         if (attemptCount < retryProperties.getMaxAttempts()) {
-            log.warn("Processing error for {}, attempt {}/{}, re-sending",
+            metrics.getHttpRetry().increment();
+            log.warn("E4: Processing error for {}, attempt {}/{}, re-sending",
                     key, attemptCount, retryProperties.getMaxAttempts());
             requestProducer.sendRequest(message);
         } else {
@@ -157,9 +190,24 @@ public class RequestConsumer {
 
     private void handlePermanentFailure(String key, RequestMessage message,
                                         int httpStatus, String errorMessage, ErrorSource source) {
-        log.error("Request failed permanently: {} - status={}, error={}, source={}",
+        log.error("E4: Request failed permanently: {} - status={}, error={}, source={}",
                 key, httpStatus, errorMessage, source);
         requestProducer.sendToDlq(key, message, "[" + source + "] " + errorMessage);
+        metrics.getDlqSent().increment();
         requestStateService.updateStatus(key, RequestStatus.FAILED);
+    }
+
+    /**
+     * Check if exception is timeout-related
+     */
+    private boolean isTimeoutException(Exception e) {
+        if (e == null) return false;
+
+        String msg = e.getMessage() != null ? e.getMessage().toLowerCase() : "";
+        return e instanceof java.util.concurrent.TimeoutException
+                || e.getCause() instanceof java.util.concurrent.TimeoutException
+                || e.getCause() instanceof java.net.SocketTimeoutException
+                || msg.contains("timeout")
+                || msg.contains("timed out");
     }
 }

@@ -114,6 +114,45 @@ services:
     environment:
       REDIS_HOSTS: local:redis:6379
 
+  # ============================================================
+  # PROMETHEUS (Metrics)
+  # ============================================================
+  prometheus:
+    image: prom/prometheus:v2.50.1
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+
+  # ============================================================
+  # GRAFANA (Dashboards)
+  # ============================================================
+  grafana:
+    image: grafana/grafana:10.4.1
+    container_name: grafana
+    depends_on:
+      - prometheus
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin123
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+
 volumes:
   redpanda_data:
+    name: redpanda_data
   redis_data:
+    name: redis_data
+  prometheus_data:
+    name: prometheus_data
+  grafana_data:
+    name: grafana_data

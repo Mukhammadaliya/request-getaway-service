@@ -1,0 +1,667 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "description": "",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "panels": [
+
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "panels": [],
+      "title": "📊 Overview — Key Stats",
+      "type": "row"
+    },
+
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 50 },
+              { "color": "red", "value": 100 }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
+      "id": 1,
+      "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "Requests Pulled (5m)",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "increase(gateway_oracle_pull_total{result=\"success\"}[5m])",
+          "legendFormat": "Pulled"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 10 },
+              { "color": "red", "value": 50 }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 1 },
+      "id": 2,
+      "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "HTTP Success (5m)",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "increase(gateway_http_request_total{result=\"success\"}[5m])",
+          "legendFormat": "Success"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 },
+              { "color": "red", "value": 10 }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 1 },
+      "id": 3,
+      "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "🔴 Total Errors (5m)",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "increase(gateway_oracle_pull_total{result=\"error\"}[5m]) + increase(gateway_kafka_produce_total{result=\"error\"}[5m]) + increase(gateway_http_request_total{result=~\"error_.*|timeout\"}[5m]) + increase(gateway_oracle_save_total{result=\"error\"}[5m])",
+          "legendFormat": "Errors"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 },
+      "id": 4,
+      "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "☠️ DLQ Sent (5m)",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "increase(gateway_dlq_sent_total[5m])",
+          "legendFormat": "DLQ"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 5 },
+              { "color": "red", "value": 20 }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 },
+      "id": 5,
+      "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "🔄 Total Retries (5m)",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "increase(gateway_kafka_produce_retry_total[5m]) + increase(gateway_http_request_retry_total[5m]) + increase(gateway_oracle_save_retry_total[5m])",
+          "legendFormat": "Retries"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 100 },
+              { "color": "red", "value": 500 }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
+      "id": 6,
+      "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "Kafka Consumer Lag",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "sum(gateway_kafka_consumer_lag)",
+          "legendFormat": "Lag"
+        }
+      ]
+    },
+
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+      "id": 101,
+      "panels": [],
+      "title": "🔴 Error Rate by Stage (Bottleneck Detection)",
+      "type": "row"
+    },
+
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "stacking": { "mode": "normal", "group": "A" },
+            "lineWidth": 1
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "id": 10,
+      "title": "Error Rate by Pipeline Stage",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(gateway_oracle_pull_total{result=\"error\"}[5m])",
+          "legendFormat": "E1: Oracle Pull"
+        },
+        {
+          "expr": "rate(gateway_kafka_produce_total{result=\"error\"}[5m])",
+          "legendFormat": "E2: Kafka Produce"
+        },
+        {
+          "expr": "rate(gateway_http_request_total{result=~\"error_4xx\"}[5m])",
+          "legendFormat": "E4: HTTP 4xx"
+        },
+        {
+          "expr": "rate(gateway_http_request_total{result=~\"error_5xx\"}[5m])",
+          "legendFormat": "E4: HTTP 5xx"
+        },
+        {
+          "expr": "rate(gateway_http_request_total{result=\"timeout\"}[5m])",
+          "legendFormat": "E4: HTTP Timeout"
+        },
+        {
+          "expr": "rate(gateway_oracle_save_total{result=\"error\"}[5m])",
+          "legendFormat": "E5: Oracle Save"
+        }
+      ]
+    },
+
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "stacking": { "mode": "normal", "group": "A" },
+            "lineWidth": 1
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "id": 11,
+      "title": "Retry Rate by Stage",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(gateway_kafka_produce_retry_total[5m])",
+          "legendFormat": "E2: Kafka Retry"
+        },
+        {
+          "expr": "rate(gateway_http_request_retry_total[5m])",
+          "legendFormat": "E4: HTTP Retry"
+        },
+        {
+          "expr": "rate(gateway_oracle_save_retry_total[5m])",
+          "legendFormat": "E5: Oracle Save Retry"
+        }
+      ]
+    },
+
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
+      "id": 102,
+      "panels": [],
+      "title": "⏱️ Latency — Where is Slow?",
+      "type": "row"
+    },
+
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "lineWidth": 2
+          },
+          "unit": "s"
+        }
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 15 },
+      "id": 20,
+      "title": "E1: Oracle Pull Duration (p95)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(gateway_oracle_pull_duration_seconds_bucket[5m]))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(gateway_oracle_pull_duration_seconds_bucket[5m]))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, rate(gateway_oracle_pull_duration_seconds_bucket[5m]))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "lineWidth": 2
+          },
+          "unit": "s"
+        }
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 15 },
+      "id": 21,
+      "title": "E4: HTTP Request Duration (p95)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(gateway_http_request_duration_seconds_bucket[5m]))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(gateway_http_request_duration_seconds_bucket[5m]))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, rate(gateway_http_request_duration_seconds_bucket[5m]))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "lineWidth": 2
+          },
+          "unit": "s"
+        }
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 15 },
+      "id": 22,
+      "title": "E5: Oracle Save Duration (p95)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(gateway_oracle_save_duration_seconds_bucket[5m]))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(gateway_oracle_save_duration_seconds_bucket[5m]))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, rate(gateway_oracle_save_duration_seconds_bucket[5m]))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 },
+      "id": 103,
+      "panels": [],
+      "title": "📡 HTTP Request Breakdown (E4)",
+      "type": "row"
+    },
+
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "fillOpacity": 20, "lineWidth": 2, "stacking": { "mode": "normal" } },
+          "unit": "reqps"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "id": 30,
+      "title": "HTTP Request Rate (success vs errors)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(gateway_http_request_total{result=\"success\"}[5m])",
+          "legendFormat": "✅ 2xx Success"
+        },
+        {
+          "expr": "rate(gateway_http_request_total{result=\"error_4xx\"}[5m])",
+          "legendFormat": "⚠️ 4xx Client Error"
+        },
+        {
+          "expr": "rate(gateway_http_request_total{result=\"error_5xx\"}[5m])",
+          "legendFormat": "🔴 5xx Server Error"
+        },
+        {
+          "expr": "rate(gateway_http_request_total{result=\"timeout\"}[5m])",
+          "legendFormat": "⏱️ Timeout"
+        }
+      ]
+    },
+
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "hideFrom": { "legend": false, "tooltip": false, "viz": false } }
+        }
+      },
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 24 },
+      "id": 31,
+      "title": "HTTP Result Distribution",
+      "type": "piechart",
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right" },
+        "pieType": "donut",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      },
+      "targets": [
+        {
+          "expr": "increase(gateway_http_request_total{result=\"success\"}[1h])",
+          "legendFormat": "Success"
+        },
+        {
+          "expr": "increase(gateway_http_request_total{result=\"error_4xx\"}[1h])",
+          "legendFormat": "4xx"
+        },
+        {
+          "expr": "increase(gateway_http_request_total{result=\"error_5xx\"}[1h])",
+          "legendFormat": "5xx"
+        },
+        {
+          "expr": "increase(gateway_http_request_total{result=\"timeout\"}[1h])",
+          "legendFormat": "Timeout"
+        }
+      ]
+    },
+
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 },
+              { "color": "red", "value": 1 }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 24 },
+      "id": 32,
+      "title": "Circuit Breaker Status",
+      "type": "stat",
+      "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [
+        {
+          "expr": "increase(gateway_http_circuitbreaker_rejected_total[5m])",
+          "legendFormat": "CB Rejected"
+        },
+        {
+          "expr": "resilience4j_circuitbreaker_state{name=\"externalApi\"}",
+          "legendFormat": "CB State"
+        }
+      ]
+    },
+
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 32 },
+      "id": 104,
+      "panels": [],
+      "title": "🔧 Consumer & Concurrency",
+      "type": "row"
+    },
+
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2 },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 33 },
+      "id": 40,
+      "title": "Consumer Concurrency & Lag",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "gateway_kafka_consumer_concurrency{listener=\"requestConsumer\"}",
+          "legendFormat": "Request Concurrency"
+        },
+        {
+          "expr": "gateway_kafka_consumer_concurrency{listener=\"responseConsumer\"}",
+          "legendFormat": "Response Concurrency"
+        },
+        {
+          "expr": "gateway_kafka_consumer_lag{listener=\"requestConsumer\"}",
+          "legendFormat": "Request Lag"
+        },
+        {
+          "expr": "gateway_kafka_consumer_lag{listener=\"responseConsumer\"}",
+          "legendFormat": "Response Lag"
+        }
+      ]
+    },
+
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "fillOpacity": 15, "lineWidth": 2 },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 33 },
+      "id": 41,
+      "title": "HTTP Thread Pool",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "gateway_http_pool_active",
+          "legendFormat": "Active Threads"
+        },
+        {
+          "expr": "gateway_http_pool_size",
+          "legendFormat": "Pool Size"
+        },
+        {
+          "expr": "gateway_http_pool_queue",
+          "legendFormat": "Queue Size"
+        }
+      ]
+    },
+
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "bars", "fillOpacity": 60, "lineWidth": 1, "stacking": { "mode": "normal" } },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 33 },
+      "id": 42,
+      "title": "Consumer Events (skip/lock/received)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(gateway_consumer_received_total[5m])",
+          "legendFormat": "Received"
+        },
+        {
+          "expr": "rate(gateway_consumer_skipped_total{reason=\"duplicate\"}[5m])",
+          "legendFormat": "Skipped (duplicate)"
+        },
+        {
+          "expr": "rate(gateway_consumer_skipped_total{reason=\"lock_failed\"}[5m])",
+          "legendFormat": "Skipped (lock)"
+        }
+      ]
+    },
+
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 41 },
+      "id": 105,
+      "panels": [],
+      "title": "☠️ DLQ & Failures",
+      "type": "row"
+    },
+
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "fixedColor": "red", "mode": "fixed" },
+          "custom": { "drawStyle": "bars", "fillOpacity": 50, "lineWidth": 1 },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 42 },
+      "id": 50,
+      "title": "DLQ Messages Over Time",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(gateway_dlq_sent_total[5m])",
+          "legendFormat": "DLQ rate (/sec)"
+        }
+      ]
+    },
+
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2 },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 42 },
+      "id": 51,
+      "title": "Oracle Poll: Empty vs Filled Cycles",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(gateway_oracle_pull_total{result=\"success\"}[5m])",
+          "legendFormat": "Requests Pulled"
+        },
+        {
+          "expr": "rate(gateway_oracle_pull_empty_total[5m])",
+          "legendFormat": "Empty Polls"
+        }
+      ]
+    }
+  ],
+
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "tags": ["gateway", "kafka", "redis", "monitoring"],
+  "templating": {
+    "list": []
+  },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Request Gateway Service — Pipeline Monitoring",
+  "uid": "gateway-pipeline-monitoring",
+  "version": 1
+}
