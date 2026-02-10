@@ -39,9 +39,6 @@ public class KafkaConfig {
     @Value("${gateway.kafka.topics.request-response}")
     private String requestResponseTopic;
 
-    @Value("${gateway.kafka.topics.request-callback}")
-    private String requestCallbackTopic;
-
     @Value("${gateway.kafka.topics.request-dlq}")
     private String requestDlqTopic;
 
@@ -67,14 +64,6 @@ public class KafkaConfig {
     @Bean
     public NewTopic requestResponseTopic() {
         return TopicBuilder.name(requestResponseTopic)
-                .partitions(concurrencyProperties.getTopicPartitions())
-                .replicas(1)
-                .build();
-    }
-
-    @Bean
-    public NewTopic requestCallbackTopic() {
-        return TopicBuilder.name(requestCallbackTopic)
                 .partitions(concurrencyProperties.getTopicPartitions())
                 .replicas(1)
                 .build();

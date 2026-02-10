@@ -6,7 +6,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
 import org.springframework.stereotype.Service;
-import uz.greenwhite.gateway.model.kafka.CallbackMessage;
 import uz.greenwhite.gateway.model.kafka.RequestMessage;
 import uz.greenwhite.gateway.model.kafka.ResponseMessage;
 
@@ -24,9 +23,6 @@ public class RequestProducer {
 
     @Value("${gateway.kafka.topics.request-response}")
     private String requestResponseTopic;
-
-    @Value("${gateway.kafka.topics.request-callback}")
-    private String requestCallbackTopic;
 
     @Value("${gateway.kafka.topics.request-dlq}")
     private String requestDlqTopic;
@@ -64,26 +60,6 @@ public class RequestProducer {
                         log.error("Failed to send response {}: {}", key, ex.getMessage());
                     } else {
                         log.info("Response sent successfully: {} [partition={}, offset={}]",
-                                key,
-                                result.getRecordMetadata().partition(),
-                                result.getRecordMetadata().offset());
-                    }
-                });
-    }
-
-    /**
-     * Send callback to Kafka (after saving response to Oracle)
-     */
-    public CompletableFuture<SendResult<String, Object>> sendCallback(CallbackMessage message) {
-        String key = message.getCompositeId();
-        log.debug("Sending callback to Kafka: {}", key);
-
-        return kafkaTemplate.send(requestCallbackTopic, key, message)
-                .whenComplete((result, ex) -> {
-                    if (ex != null) {
-                        log.error("Failed to send callback {}: {}", key, ex.getMessage());
-                    } else {
-                        log.info("Callback sent successfully: {} [partition={}, offset={}]",
                                 key,
                                 result.getRecordMetadata().partition(),
                                 result.getRecordMetadata().offset());

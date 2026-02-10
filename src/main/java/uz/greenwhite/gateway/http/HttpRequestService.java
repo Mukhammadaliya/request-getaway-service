@@ -15,8 +15,11 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 import reactor.core.publisher.Mono;
 import uz.greenwhite.gateway.model.kafka.RequestMessage;
 import uz.greenwhite.gateway.model.kafka.ResponseMessage;
+import uz.greenwhite.gateway.oauth2.OAuth2ProviderService;
+import uz.greenwhite.gateway.oauth2.model.Token;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.Map;
 
 @Slf4j
@@ -26,6 +29,7 @@ public class HttpRequestService {
 
     private final WebClient webClient;
     private final CircuitBreakerRegistry circuitBreakerRegistry;
+    private final OAuth2ProviderService oAuth2ProviderService;
 
     private CircuitBreaker circuitBreaker;
 
@@ -33,7 +37,6 @@ public class HttpRequestService {
     public void init() {
         this.circuitBreaker = circuitBreakerRegistry.circuitBreaker("externalApi");
 
-        // State o'zgarishlarini log qilish
         circuitBreaker.getEventPublisher()
                 .onStateTransition(event ->
                         log.warn("⚡ Circuit Breaker state change: {}", event.getStateTransition()))
@@ -44,7 +47,7 @@ public class HttpRequestService {
     }
 
     /**
-     * Send HTTP request with Circuit Breaker protection
+     * Send HTTP request with Circuit Breaker + OAuth2 support
      */
     public Mono<ResponseMessage> sendRequest(RequestMessage request) {
         String compositeId = request.getCompositeId();
@@ -57,6 +60,9 @@ public class HttpRequestService {
             return Mono.just(buildCircuitBreakerResponse(request));
         }
 
+        // 2. OAuth2 Authorization header qo'shish
+        Map<String, String> headers = addAuthorizationHeader(request);
+
         long startTime = System.nanoTime();
         String fullUrl = buildFullUrl(request);
         HttpMethod method = HttpMethod.valueOf(request.getMethod().toUpperCase());
@@ -66,36 +72,23 @@ public class HttpRequestService {
         return webClient
                 .method(method)
                 .uri(fullUrl)
-                .headers(headers -> addHeaders(headers, request.getHeaders()))
+                .headers(h -> applyHeaders(h, headers))
                 .bodyValue(request.getBody() != null ? request.getBody() : "")
-                .exchangeToMono(response -> {
-                    int statusCode = response.statusCode().value();
-                    String contentType = response.headers().contentType()
-                            .map(MediaType::toString)
-                            .orElse("application/json");
-
-                    return response.bodyToMono(String.class)
-                            .defaultIfEmpty("")
-                            .map(body -> buildSuccessResponse(request, statusCode, contentType, body));
-                })
-                .doOnSuccess(resp -> {
+                .retrieve()
+                .toEntity(String.class)
+                .map(entity -> {
                     long duration = System.nanoTime() - startTime;
-                    int status = resp.getHttpStatus();
+                    int status = entity.getStatusCode().value();
+                    circuitBreaker.onSuccess(duration, java.util.concurrent.TimeUnit.NANOSECONDS);
 
-                    if (status >= 200 && status < 500) {
-                        // 2xx, 3xx, 4xx — API ishlayapti, CB success
-                        circuitBreaker.onSuccess(duration, java.util.concurrent.TimeUnit.NANOSECONDS);
-                        if (status >= 400) {
-                            log.warn("HTTP client error (not CB failure): {} -> status={}", compositeId, status);
-                        } else {
-                            log.info("HTTP success: {} -> status={}", compositeId, status);
-                        }
-                    } else {
-                        // 5xx — server error, CB failure
-                        circuitBreaker.onError(duration, java.util.concurrent.TimeUnit.NANOSECONDS,
-                                new RuntimeException("HTTP " + status));
-                        log.warn("HTTP server error (CB failure): {} -> status={}", compositeId, status);
-                    }
+                    log.info("HTTP response: {} -> status={}, time={}ms",
+                            compositeId, status, duration / 1_000_000);
+
+                    String contentType = entity.getHeaders().getContentType() != null
+                            ? entity.getHeaders().getContentType().toString()
+                            : MediaType.APPLICATION_JSON_VALUE;
+
+                    return buildSuccessResponse(request, status, contentType, entity.getBody());
                 })
                 .onErrorResume(ex -> {
                     long duration = System.nanoTime() - startTime;
@@ -105,9 +98,35 @@ public class HttpRequestService {
                 });
     }
 
+    // ==================== OAUTH2 ====================
+
     /**
-     * Build full URL from request
+     * OAuth2 token olish va headers'ga qo'shish
+     * Eski tizim pattern: RequestMessageProcessorService.addAuthorizationHeader()
      */
+    private Map<String, String> addAuthorizationHeader(RequestMessage request) {
+        Map<String, String> headers = request.getHeaders() != null
+                ? new HashMap<>(request.getHeaders())
+                : new HashMap<>();
+
+        if (request.getOauth2Provider() == null) {
+            return headers;
+        }
+
+        try {
+            Token token = oAuth2ProviderService.getToken(request.getOauth2Provider());
+            headers.put(HttpHeaders.AUTHORIZATION, token.getAuthorizationHeader());
+            log.debug("OAuth2 Authorization header added for provider: {}", request.getOauth2Provider());
+        } catch (Exception e) {
+            log.error("Failed to get OAuth2 token for provider {}: {}",
+                    request.getOauth2Provider(), e.getMessage());
+        }
+
+        return headers;
+    }
+
+    // ==================== HELPERS ====================
+
     private String buildFullUrl(RequestMessage request) {
         StringBuilder url = new StringBuilder(request.getBaseUrl());
 
@@ -122,19 +141,13 @@ public class HttpRequestService {
         return url.toString();
     }
 
-    /**
-     * Add headers to request
-     */
-    private void addHeaders(HttpHeaders httpHeaders, Map<String, String> customHeaders) {
+    private void applyHeaders(HttpHeaders httpHeaders, Map<String, String> customHeaders) {
         httpHeaders.setContentType(MediaType.APPLICATION_JSON);
         if (customHeaders != null) {
             customHeaders.forEach(httpHeaders::add);
         }
     }
 
-    /**
-     * Circuit Breaker OPEN response
-     */
     private ResponseMessage buildCircuitBreakerResponse(RequestMessage request) {
         return ResponseMessage.builder()
                 .companyId(request.getCompanyId())
@@ -146,9 +159,6 @@ public class HttpRequestService {
                 .build();
     }
 
-    /**
-     * Build success response
-     */
     private ResponseMessage buildSuccessResponse(RequestMessage request, int status,
                                                  String contentType, String body) {
         return ResponseMessage.builder()
@@ -161,9 +171,6 @@ public class HttpRequestService {
                 .build();
     }
 
-    /**
-     * Build error response
-     */
     private ResponseMessage buildErrorResponse(RequestMessage request, Throwable ex) {
         int httpStatus = 500;
         String errorMessage = ex.getMessage();

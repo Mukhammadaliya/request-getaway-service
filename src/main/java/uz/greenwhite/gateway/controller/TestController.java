@@ -90,4 +90,42 @@ public class TestController {
                 "timestamp", LocalDateTime.now().toString()
         ));
     }
+
+
+    /**
+     * Send test request WITH OAuth2 to Kafka
+     *
+     * Example: POST http://localhost:8090/api/test/send-oauth2
+     * Example: POST http://localhost:8090/api/test/send-oauth2?provider=smartup
+     */
+    @PostMapping("/send-oauth2")
+    public ResponseEntity<Map<String, Object>> sendTestOAuth2Request(
+            @RequestParam(defaultValue = "smartup") String provider) {
+
+        RequestMessage request = RequestMessage.builder()
+                .companyId(100L)
+                .requestId(System.currentTimeMillis())
+                .filialId(1L)
+                .endpointId(1L)
+                .baseUrl("https://httpbin.org")
+                .uri("/post")
+                .method("POST")
+                .headers(Map.of("X-Test-Header", "oauth2-test"))
+                .body("{\"test\": \"oauth2\", \"provider\": \"" + provider + "\"}")
+                .oauth2Provider(provider)
+                .projectCode("TEST")
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        requestProducer.sendRequest(request);
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("status", "sent");
+        response.put("compositeId", request.getCompositeId());
+        response.put("oauth2Provider", provider);
+        response.put("message", "OAuth2 request sent to Kafka");
+
+        log.info("OAuth2 test request sent: {} with provider: {}", request.getCompositeId(), provider);
+        return ResponseEntity.ok(response);
+    }
 }

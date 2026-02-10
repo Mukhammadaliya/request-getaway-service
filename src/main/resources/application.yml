@@ -66,7 +66,6 @@ gateway:
     topics:
       request-new: bmb.request.new
       request-response: bmb.request.response
-      request-callback: bmb.request.callback
       request-dlq: bmb.request.dlq
   biruni:
     base-url: http://localhost:8080/smartup24
@@ -84,6 +83,14 @@ gateway:
     scale-step: 2
     scale-cooldown-ms: 30000
     topic-partitions: 10
+  oauth2:
+    providers:
+      smartup:
+        type: biruni
+        token-url: http://localhost:8080/b6/security/oauth/token
+        client-id: 12344432421
+        client-secret: ASLKDGHAJGF1341ASGHFAGFHj
+        scope: read+write
 
 # Logging
 logging:
