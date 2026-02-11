@@ -22,16 +22,16 @@ public class DynamicConcurrencyManager {
     private final ConcurrencyProperties properties;
 
     /**
-     * Har bir listener uchun alohida state
+     * Separate state tracking for each listener
      */
     private final Map<String, AtomicInteger> concurrencyMap = new ConcurrentHashMap<>();
     private final Map<String, AtomicLong> lastScaleTimeMap = new ConcurrentHashMap<>();
 
     /**
-     * Listener ID bo'yicha concurrency ni lag ga qarab moslashtirish.
+     * Adjust concurrency for a specific listener based on current consumer lag.
      *
-     * @param listenerId @KafkaListener dagi id qiymati
-     * @param currentLag hozirgi consumer lag (barcha partition lar yig'indisi)
+     * @param listenerId the @KafkaListener id value
+     * @param currentLag current consumer lag (sum across all partitions)
      */
     public void adjustConcurrency(String listenerId, long currentLag) {
         MessageListenerContainer container = registry.getListenerContainer(listenerId);
@@ -46,7 +46,7 @@ public class DynamicConcurrencyManager {
             return;
         }
 
-        // Listener uchun state olish yoki yaratish
+        // Get or create state for this listener
         AtomicInteger currentConcurrency = concurrencyMap.computeIfAbsent(
                 listenerId, k -> new AtomicInteger(0));
         AtomicLong lastScaleTime = lastScaleTimeMap.computeIfAbsent(
@@ -73,7 +73,7 @@ public class DynamicConcurrencyManager {
             return;
         }
 
-        // Cooldown check
+        // Cooldown check — prevent too frequent scaling
         long now = System.currentTimeMillis();
         long lastScale = lastScaleTime.get();
         if (now - lastScale < properties.getScaleCooldownMs()) {
@@ -82,7 +82,7 @@ public class DynamicConcurrencyManager {
             return;
         }
 
-        // Step-based scaling
+        // Step-based scaling (gradual increase/decrease)
         int newConcurrency;
         if (desired > current) {
             newConcurrency = Math.min(current + properties.getScaleStep(), desired);
@@ -90,7 +90,7 @@ public class DynamicConcurrencyManager {
             newConcurrency = Math.max(current - properties.getScaleStep(), desired);
         }
 
-        // Bounds check
+        // Enforce min/max bounds
         newConcurrency = Math.max(properties.getMinConcurrency(), newConcurrency);
         newConcurrency = Math.min(properties.getMaxConcurrency(), newConcurrency);
 
@@ -98,18 +98,18 @@ public class DynamicConcurrencyManager {
             return;
         }
 
-        // Apply new concurrency
+        // Apply new concurrency level
         try {
             concurrent.setConcurrency(newConcurrency);
 
-            // stop/start o'rniga — faqat keyingi rebalance da qo'llaniladi
-            // Bu mavjud threadlarni to'xtatmaydi, faqat yangi concurrency ni belgilaydi
+            // Instead of stop/start — only applied on next rebalance.
+            // This does not halt existing threads, just sets the new target.
             if (newConcurrency > current) {
-                // Scale UP — yangi threadlar qo'shish uchun restart kerak
+                // Scale UP — restart needed to spawn new consumer threads
                 concurrent.stop();
                 concurrent.start();
             }
-            // Scale DOWN — stop/start qilmaymiz, keyingi rebalance da tushadi
+            // Scale DOWN — no stop/start needed, threads reduce on next rebalance
 
             currentConcurrency.set(newConcurrency);
             lastScaleTime.set(now);
@@ -124,7 +124,7 @@ public class DynamicConcurrencyManager {
     }
 
     /**
-     * Ma'lum listener ning hozirgi concurrency qiymati
+     * Get the current concurrency level for a specific listener.
      */
     public int getCurrentConcurrency(String listenerId) {
         AtomicInteger val = concurrencyMap.get(listenerId);
@@ -132,7 +132,7 @@ public class DynamicConcurrencyManager {
     }
 
     /**
-     * Ma'lum listener ning oxirgi scaling vaqti
+     * Get the last scaling timestamp for a specific listener.
      */
     public long getLastScaleTime(String listenerId) {
         AtomicLong val = lastScaleTimeMap.get(listenerId);

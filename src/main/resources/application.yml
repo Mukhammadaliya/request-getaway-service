@@ -1,13 +1,21 @@
+# ============================================================
+# REQUEST GATEWAY SERVICE — Application Configuration
+# ============================================================
+# This service is a universal request gateway that pulls
+# requests from a data source, sends them to external APIs
+# via Kafka-driven pipeline, and saves responses back.
+# ============================================================
+
 spring:
   lifecycle:
     timeout-per-shutdown-phase: 30s
   application:
     name: request-gateway-service
   profiles:
-    active: dev
+    active: ${SPRING_PROFILE:dev}
 
   # Kafka — Spring auto-config (serializer/deserializer)
-  # bootstrap-servers va group-id gateway.kafka dan olinadi
+  # bootstrap-servers and group-id are loaded from gateway.kafka section
   kafka:
     bootstrap-servers: ${gateway.kafka.bootstrap-servers}
     consumer:
@@ -16,31 +24,35 @@ spring:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
-        spring.json.trusted.packages: "uz.greenwhite.gateway.*"
+        spring.json.trusted.packages: "*"
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
 
-  # Redis
+  # Redis — distributed cache and state management
   data:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
 
-  # Oracle (hozircha disable)
+  # JDBC auto-config disabled (data source uses HTTP API, not direct DB)
   autoconfigure:
     exclude:
       - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
 
-# Server
+# ============================================================
+# SERVER
+# ============================================================
 server:
-  port: 8090
+  port: ${SERVER_PORT:8090}
   shutdown: graceful
 
-# Actuator
+# ============================================================
+# ACTUATOR & MONITORING
+# ============================================================
 management:
   server:
-    port: 8091
+    port: ${MANAGEMENT_PORT:8091}
   endpoints:
     web:
       exposure:
@@ -50,93 +62,100 @@ management:
       show-details: always
 
 # ============================================================
-# GATEWAY CONFIGURATION (barcha custom config shu yerda)
+# GATEWAY CONFIGURATION — All custom settings
 # ============================================================
 gateway:
 
-  # Kafka
+  # --- Kafka ---
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:19092}
-    group-id: gateway-service-group
+    group-id: ${KAFKA_GROUP_ID:gateway-service-group}
     topics:
-      request-new: bmb.request.new
-      request-response: bmb.request.response
-      request-dlq: bmb.request.dlq
+      request-new: ${KAFKA_TOPIC_REQUEST:gateway.request.new}
+      request-response: ${KAFKA_TOPIC_RESPONSE:gateway.request.response}
+      request-dlq: ${KAFKA_TOPIC_DLQ:gateway.request.dlq}
 
-  # Oracle (Biruni) connection
-  biruni:
-    base-url: http://localhost:8080/smartup24
-    username: admin@head
-    password: greenwhite
-    request-pull-uri: /b/biruni/bmb/requests$pull
-    response-save-uri: /b/biruni/bmb/requests$save
-    connection-timeout: 60
+  # --- Data Source connection (pull requests / save responses) ---
+  source:
+    base-url: ${SOURCE_BASE_URL:http://localhost:8080/smartup24}
+    username: ${SOURCE_USERNAME:admin@head}
+    password: ${SOURCE_PASSWORD:greenwhite}
+    request-pull-uri: ${SOURCE_PULL_URI:/b/biruni/bmb/requests$pull}
+    response-save-uri: ${SOURCE_SAVE_URI:/b/biruni/bmb/requests$save}
+    connection-timeout: ${SOURCE_TIMEOUT:60}
 
-  # Polling (Oracle dan pull qilish)
+  # --- Polling (scheduled pull from data source) ---
   polling:
-    enabled: true
-    interval-ms: 5000
-    batch-size: 100
+    enabled: ${POLLING_ENABLED:true}
+    interval-ms: ${POLLING_INTERVAL_MS:5000}
+    batch-size: ${POLLING_BATCH_SIZE:100}
 
-  # HTTP client (tashqi API ga request)
+  # --- HTTP Client (outbound requests to external APIs) ---
   http:
-    connect-timeout-ms: 10000
-    read-timeout-ms: 30000
-    write-timeout-ms: 30000
+    connect-timeout-ms: ${HTTP_CONNECT_TIMEOUT:10000}
+    read-timeout-ms: ${HTTP_READ_TIMEOUT:30000}
+    write-timeout-ms: ${HTTP_WRITE_TIMEOUT:30000}
 
-  # Retry
+  # --- Retry ---
   retry:
-    max-attempts: 3
-    interval-ms: 3000
-    retryable-statuses: 408,429,500,502,503,504
+    max-attempts: ${RETRY_MAX_ATTEMPTS:3}
+    interval-ms: ${RETRY_INTERVAL_MS:3000}
+    retryable-statuses: ${RETRY_STATUSES:408,429,500,502,503,504}
 
-  # Dynamic concurrency
+  # --- Dynamic Concurrency (auto-scaling consumer threads) ---
   concurrency:
-    min-concurrency: 10
-    max-concurrency: 15
-    monitor-interval-ms: 10000
-    scale-up-threshold: 50
-    scale-down-threshold: 10
-    scale-step: 2
-    scale-cooldown-ms: 30000
-    topic-partitions: 10
+    min-concurrency: ${CONCURRENCY_MIN:10}
+    max-concurrency: ${CONCURRENCY_MAX:15}
+    monitor-interval-ms: ${CONCURRENCY_MONITOR_INTERVAL:10000}
+    scale-up-threshold: ${CONCURRENCY_SCALE_UP:50}
+    scale-down-threshold: ${CONCURRENCY_SCALE_DOWN:10}
+    scale-step: ${CONCURRENCY_SCALE_STEP:2}
+    scale-cooldown-ms: ${CONCURRENCY_COOLDOWN:30000}
+    topic-partitions: ${KAFKA_PARTITIONS:10}
 
-  # OAuth2
+  # --- OAuth2 Providers ---
+  # Configure one or more OAuth2 providers for external API authentication.
+  # Each provider has its own token-url, client credentials, and scope.
+  # The 'type' field determines the token acquisition strategy.
   oauth2:
     providers:
       smartup:
-        type: biruni
-        token-url: http://localhost:8080/b6/security/oauth/token
-        client-id: 12344432421
-        client-secret: ASLKDGHAJGF1341ASGHFAGFHj
-        scope: read+write
+        type: ${OAUTH2_SMARTUP_TYPE:biruni}
+        token-url: ${OAUTH2_SMARTUP_TOKEN_URL:http://localhost:8080/b6/security/oauth/token}
+        client-id: ${OAUTH2_SMARTUP_CLIENT_ID:12344432421}
+        client-secret: ${OAUTH2_SMARTUP_CLIENT_SECRET:ASLKDGHAJGF1341ASGHFAGFHj}
+        scope: ${OAUTH2_SMARTUP_SCOPE:read+write}
 
-  # Telegram notification
+  # --- Telegram Notification ---
   telegram:
-    enabled: true
-    bot-token: "8318506270:AAGzEwBW46VE-_K_Z__Gcuh8MiPOvBdaVMM"
-    chat-id: -1002508752139
-    message-thread-id: 3716
+    enabled: ${TELEGRAM_ENABLED:false}
+    bot-token: ${TELEGRAM_BOT_TOKEN:}
+    chat-id: ${TELEGRAM_CHAT_ID:}
+    message-thread-id: ${TELEGRAM_THREAD_ID:}
 
-# Logging
+# ============================================================
+# LOGGING
+# ============================================================
 logging:
   level:
     root: INFO
-    uz.greenwhite.gateway: DEBUG
+    uz.greenwhite.gateway: ${LOG_LEVEL:DEBUG}
     org.apache.kafka: WARN
 
-# Circuit Breaker
+# ============================================================
+# CIRCUIT BREAKER (Resilience4j)
+# ============================================================
 resilience4j:
   circuitbreaker:
     instances:
       externalApi:
         register-health-indicator: true
         sliding-window-type: COUNT_BASED
-        sliding-window-size: 10
-        minimum-number-of-calls: 5
-        failure-rate-threshold: 50
-        wait-duration-in-open-state: 30s
-        permitted-number-of-calls-in-half-open-state: 3
-        slow-call-duration-threshold: 10s
-        slow-call-rate-threshold: 80
+        sliding-window-size: ${CB_WINDOW_SIZE:10}
+        minimum-number-of-calls: ${CB_MIN_CALLS:5}
+        failure-rate-threshold: ${CB_FAILURE_THRESHOLD:50}
+        wait-duration-in-open-state: ${CB_WAIT_DURATION:30s}
+        permitted-number-of-calls-in-half-open-state: ${CB_HALF_OPEN_CALLS:3}
+        slow-call-duration-threshold: ${CB_SLOW_CALL_THRESHOLD:10s}
+        slow-call-rate-threshold: ${CB_SLOW_CALL_RATE:80}
         automatic-transition-from-open-to-half-open-enabled: true

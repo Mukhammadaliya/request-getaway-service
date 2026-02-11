@@ -35,11 +35,12 @@ public class DlqMessage {
      * Build DLQ message from RequestMessage
      */
     public static DlqMessage from(RequestMessage request, String failureReason,
-                                  String errorSource, int httpStatus, int attemptCount) {
+                                  String errorSource, int httpStatus, int attemptCount,
+                                  String originalTopic) {
         return DlqMessage.builder()
                 .companyId(request.getCompanyId())
                 .requestId(request.getRequestId())
-                .originalTopic("bmb.request.new")
+                .originalTopic(originalTopic)
                 .failureReason(failureReason)
                 .errorSource(errorSource)
                 .httpStatus(httpStatus)

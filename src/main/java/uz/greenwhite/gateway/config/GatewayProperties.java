@@ -8,11 +8,11 @@ import org.springframework.stereotype.Component;
 @Getter
 @Setter
 @Component
-@ConfigurationProperties(prefix = "gateway.biruni")
+@ConfigurationProperties(prefix = "gateway.source")
 public class GatewayProperties {
 
     /**
-     * Biruni application base URL
+     * Data source base URL
      * Example: http://localhost:8081/b6/b
      */
     private String baseUrl;
@@ -28,16 +28,16 @@ public class GatewayProperties {
     private String password;
 
     /**
-     * URI for pulling requests
-     * Example: /biruni/bmb/requests$pull
+     * URI for pulling requests from data source
+     * Example: /api/requests/pull
      */
-    private String requestPullUri = "/biruni/bmb/requests$pull";
+    private String requestPullUri;
 
     /**
-     * URI for saving response
-     * Example: /biruni/bmb/requests$save
+     * URI for saving responses to data source
+     * Example: /api/requests/save
      */
-    private String responseSaveUri = "/biruni/bmb/requests$save";
+    private String responseSaveUri;
 
     /**
      * Connection timeout in seconds

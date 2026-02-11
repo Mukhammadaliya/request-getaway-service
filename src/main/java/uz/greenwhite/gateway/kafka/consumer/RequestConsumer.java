@@ -8,6 +8,7 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
+import uz.greenwhite.gateway.config.KafkaProperties;
 import uz.greenwhite.gateway.config.RetryProperties;
 import uz.greenwhite.gateway.http.HttpRequestService;
 import uz.greenwhite.gateway.kafka.producer.RequestProducer;
@@ -31,6 +32,7 @@ public class RequestConsumer {
     private final RetryProperties retryProperties;
     private final ThreadPoolTaskExecutor httpExecutor;
     private final GatewayMetrics metrics;
+    private final KafkaProperties kafkaProperties;
 
     public RequestConsumer(
             HttpRequestService httpRequestService,
@@ -38,13 +40,14 @@ public class RequestConsumer {
             RequestProducer requestProducer,
             RetryProperties retryProperties,
             @Qualifier("httpRequestExecutor") ThreadPoolTaskExecutor httpExecutor,
-            GatewayMetrics metrics) {
+            GatewayMetrics metrics, KafkaProperties kafkaProperties) {
         this.httpRequestService = httpRequestService;
         this.requestStateService = requestStateService;
         this.requestProducer = requestProducer;
         this.retryProperties = retryProperties;
         this.httpExecutor = httpExecutor;
         this.metrics = metrics;
+        this.kafkaProperties = kafkaProperties;
     }
 
     @KafkaListener(
@@ -195,7 +198,10 @@ public class RequestConsumer {
                 key, httpStatus, errorMessage, source);
 
         int attemptCount = requestStateService.getAttemptCount(key);
-        DlqMessage dlqMessage = DlqMessage.from(message, errorMessage, source.name(), httpStatus, attemptCount);
+        DlqMessage dlqMessage = DlqMessage.from(
+                message, errorMessage, source.name(), httpStatus, attemptCount,
+                kafkaProperties.getTopics().getRequestNew()  // ← dynamic topic
+        );
         requestProducer.sendToDlq(dlqMessage);
 
         metrics.getDlqSent().increment();

@@ -30,7 +30,7 @@ public class ConcurrencyMonitorService {
     private final KafkaProperties kafkaProperties;
 
     /**
-     * Listener ID lar — @KafkaListener(id = "...") bilan bir xil
+     * Listener IDs — must match @KafkaListener(id = "...") values
      */
     public static final String REQUEST_LISTENER_ID = "requestConsumer";
     public static final String RESPONSE_LISTENER_ID = "responseConsumer";
@@ -47,12 +47,13 @@ public class ConcurrencyMonitorService {
     }
 
     /**
-     * Har N millisekundda barcha consumer lar uchun lag tekshirish
+     * Periodically check lag for all consumers and adjust concurrency.
+     * Runs every N milliseconds as configured by monitor-interval-ms.
      */
     @Scheduled(fixedDelayString = "${gateway.concurrency.monitor-interval-ms:10000}")
     public void monitorAndScale() {
         try {
-            // 1. Consumer group ning barcha committed offset larini bir marta olish
+            // 1. Get all committed offsets for consumer group (single call)
             Map<TopicPartition, OffsetAndMetadata> allCommittedOffsets = getCommittedOffsets();
 
             if (allCommittedOffsets == null || allCommittedOffsets.isEmpty()) {
@@ -60,14 +61,14 @@ public class ConcurrencyMonitorService {
                 return;
             }
 
-            // 2. Request topic lag → RequestConsumer scaling
+            // 2. Request topic lag → scale RequestConsumer
             String requestTopic = kafkaProperties.getTopics().getRequestNew();
             long requestLag = calculateLagForTopic(requestTopic, allCommittedOffsets);
             lagMap.put(requestTopic, requestLag);
             log.debug("Consumer lag [{}]: {} messages", requestTopic, requestLag);
             concurrencyManager.adjustConcurrency(REQUEST_LISTENER_ID, requestLag);
 
-            // 3. Response topic lag → ResponseConsumer scaling
+            // 3. Response topic lag → scale ResponseConsumer
             String responseTopic = kafkaProperties.getTopics().getRequestResponse();
             long responseLag = calculateLagForTopic(responseTopic, allCommittedOffsets);
             lagMap.put(responseTopic, responseLag);
@@ -80,7 +81,7 @@ public class ConcurrencyMonitorService {
     }
 
     /**
-     * Consumer group ning committed offset larini olish
+     * Get committed offsets for the consumer group.
      */
     private Map<TopicPartition, OffsetAndMetadata> getCommittedOffsets() throws Exception {
         ListConsumerGroupOffsetsResult result =
@@ -89,12 +90,13 @@ public class ConcurrencyMonitorService {
     }
 
     /**
-     * Bitta topic uchun lag hisoblash
+     * Calculate total consumer lag for a specific topic.
+     * Lag = sum of (end offset - committed offset) for each partition.
      */
     private long calculateLagForTopic(String topicName,
                                       Map<TopicPartition, OffsetAndMetadata> allCommittedOffsets) throws Exception {
 
-        // 1. Shu topic ning committed offset larini filter qilish
+        // 1. Filter committed offsets for this specific topic
         Map<TopicPartition, OffsetAndMetadata> topicOffsets = allCommittedOffsets.entrySet().stream()
                 .filter(e -> e.getKey().topic().equals(topicName))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
@@ -103,14 +105,14 @@ public class ConcurrencyMonitorService {
             return 0;
         }
 
-        // 2. End offset larini olish
+        // 2. Get end (latest) offsets for each partition
         Map<TopicPartition, OffsetSpec> offsetSpecMap = topicOffsets.keySet().stream()
                 .collect(Collectors.toMap(tp -> tp, tp -> OffsetSpec.latest()));
 
         Map<TopicPartition, ListOffsetsResult.ListOffsetsResultInfo> endOffsets =
                 adminClient.listOffsets(offsetSpecMap).all().get(10, TimeUnit.SECONDS);
 
-        // 3. Lag hisoblash
+        // 3. Calculate total lag across all partitions
         long totalLag = 0;
         for (Map.Entry<TopicPartition, OffsetAndMetadata> entry : topicOffsets.entrySet()) {
             TopicPartition tp = entry.getKey();
@@ -123,7 +125,8 @@ public class ConcurrencyMonitorService {
     }
 
     /**
-     * Tashqi classlar uchun lag olish (metrics, health)
+     * Get the last known lag for a topic.
+     * Used by external classes (metrics, health indicators).
      */
     public long getLastKnownLag(String topicName) {
         return lagMap.getOrDefault(topicName, 0L);

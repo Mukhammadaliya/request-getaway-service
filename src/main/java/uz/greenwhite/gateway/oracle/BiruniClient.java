@@ -3,26 +3,25 @@ package uz.greenwhite.gateway.oracle;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import uz.greenwhite.gateway.config.GatewayProperties;
+import uz.greenwhite.gateway.model.ResponseSaveRequest;
 import uz.greenwhite.gateway.model.kafka.RequestMessage;
-import uz.greenwhite.gateway.model.kafka.ResponseMessage;
+import uz.greenwhite.gateway.source.RequestSourceClient;
+import uz.greenwhite.gateway.source.ResponseSinkClient;
 import uz.greenwhite.gateway.util.AuthUtil;
 
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
 
 @Slf4j
 @Component
-public class BiruniClient {
+public class BiruniClient implements RequestSourceClient, ResponseSinkClient {
 
     private final RestClient restClient;
     private final GatewayProperties properties;
@@ -47,9 +46,15 @@ public class BiruniClient {
                 .build();
     }
 
+    // ==================== RequestSourceClient ====================
+
     /**
-     * Pull new requests from Oracle (status = 'N')
+     * Pull pending requests from the data source (status = 'N').
+     * Sends HTTP GET to the configured pull URI with Basic Auth.
+     *
+     * @return list of request messages ready for processing
      */
+    @Override
     public List<RequestMessage> pullRequests() {
         try {
             log.debug("Pulling requests from: {}{}", properties.getBaseUrl(), properties.getRequestPullUri());
@@ -63,20 +68,27 @@ public class BiruniClient {
                     .getBody();
 
             if (requests != null && !requests.isEmpty()) {
-                log.info("Pulled {} requests from Oracle", requests.size());
+                log.info("Pulled {} requests from data source", requests.size());
             }
 
             return requests != null ? requests : List.of();
 
         } catch (Exception e) {
-            log.error("Error pulling requests from Oracle: {}", e.getMessage(), e);
-            throw new RuntimeException("Oracle pull failed: " + e.getMessage(), e);
+            log.error("Error pulling requests from data source: {}", e.getMessage(), e);
+            throw new RuntimeException("Request pull failed: " + e.getMessage(), e);
         }
     }
 
+    // ==================== ResponseSinkClient ====================
+
     /**
-     * Save response back to Oracle
+     * Save HTTP response back to the data source.
+     * Sends HTTP POST to the configured save URI with Basic Auth.
+     *
+     * @param request the response data to save
+     * @return true if saved successfully
      */
+    @Override
     public boolean saveResponse(ResponseSaveRequest request) {
         try {
             log.debug("Saving response for: {}:{}", request.getCompanyId(), request.getRequestId());
@@ -100,46 +112,8 @@ public class BiruniClient {
             return response;
 
         } catch (Exception e) {
-            log.error("Error saving response to Oracle: {}", e.getMessage(), e);
+            log.error("Error saving response to data source: {}", e.getMessage(), e);
             return false;
-        }
-    }
-
-    /**
-     * Request for saving response to Oracle
-     */
-    @lombok.Data
-    @lombok.Builder
-    @lombok.NoArgsConstructor
-    @lombok.AllArgsConstructor
-    public static class ResponseSaveRequest {
-        
-        @com.fasterxml.jackson.annotation.JsonProperty("company_id")
-        private Long companyId;
-        
-        @com.fasterxml.jackson.annotation.JsonProperty("request_id")
-        private Long requestId;
-        
-        @com.fasterxml.jackson.annotation.JsonProperty("response")
-        private ResponseData response;
-        
-        @com.fasterxml.jackson.annotation.JsonProperty("error_message")
-        private String errorMessage;
-
-        @lombok.Data
-        @lombok.Builder
-        @lombok.NoArgsConstructor
-        @lombok.AllArgsConstructor
-        public static class ResponseData {
-            
-            @com.fasterxml.jackson.annotation.JsonProperty("status")
-            private int status;
-            
-            @com.fasterxml.jackson.annotation.JsonProperty("content_type")
-            private String contentType;
-            
-            @com.fasterxml.jackson.annotation.JsonProperty("body")
-            private Object body;
         }
     }
 }

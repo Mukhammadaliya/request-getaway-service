@@ -6,11 +6,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import uz.greenwhite.gateway.config.KafkaProperties;
 import uz.greenwhite.gateway.config.RetryProperties;
 import uz.greenwhite.gateway.kafka.producer.RequestProducer;
 import uz.greenwhite.gateway.metrics.GatewayMetrics;
 import uz.greenwhite.gateway.model.kafka.DlqMessage;
 import uz.greenwhite.gateway.model.kafka.RequestMessage;
+import uz.greenwhite.gateway.source.RequestSourceClient;
+import uz.greenwhite.gateway.validation.RequestValidator;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -26,6 +29,9 @@ public class RequestPuller {
     private final RequestProducer requestProducer;
     private final RetryProperties retryProperties;
     private final GatewayMetrics metrics;
+    private final KafkaProperties kafkaProperties;
+    private final RequestValidator requestValidator;
+    private final RequestSourceClient requestSourceClient;
 
     @Scheduled(fixedDelayString = "${gateway.polling.interval-ms:5000}")
     public void pullRequests() {
@@ -37,7 +43,7 @@ public class RequestPuller {
                 Timer.Sample pullSample = Timer.start(metrics.getRegistry());
 
                 try {
-                    requests = biruniClient.pullRequests();
+                    requests = requestSourceClient.pullRequests();
                 } catch (Exception e) {
                     pullSample.stop(metrics.getOraclePullTimer());
                     metrics.getOraclePullError().increment();
@@ -73,16 +79,21 @@ public class RequestPuller {
             String compositeId = request.getCompositeId();
 
             try {
-                // ===== E2: Send to Kafka with retry + Timer =====
+                // Validate before sending to Kafka
+                List<String> validationErrors = requestValidator.validate(request);
+                if (!validationErrors.isEmpty()) {
+                    String errorMsg = "Validation failed: " + String.join("; ", validationErrors);
+                    log.error("Request validation failed: {} - {}", compositeId, errorMsg);
+                    sendToDlq(request, errorMsg);
+                    failedList.add(compositeId);
+                    continue;
+                }
+
                 sendToKafkaWithRetry(request);
                 successList.add(compositeId);
-
             } catch (Exception e) {
                 failedList.add(compositeId);
-                metrics.getKafkaProduceError().increment();
-                log.error("E2: Failed to process request: {} - {}", compositeId, e.getMessage());
-
-                // Send to DLQ for analysis
+                log.error("Failed to process request: {} - {}", compositeId, e.getMessage());
                 sendToDlq(request, e.getMessage());
             }
         }
@@ -141,7 +152,11 @@ public class RequestPuller {
      */
     private void sendToDlq(RequestMessage request, String errorMessage) {
         try {
-            DlqMessage dlqMessage = DlqMessage.from(request, errorMessage, "KAFKA", 0, retryProperties.getMaxAttempts());
+            DlqMessage dlqMessage = DlqMessage.from(
+                    request, errorMessage, "KAFKA", 0,
+                    retryProperties.getMaxAttempts(),
+                    kafkaProperties.getTopics().getRequestNew()  // ← dynamic topic
+            );
             requestProducer.sendToDlq(dlqMessage);
             metrics.getDlqSent().increment();
             log.info("Request sent to DLQ: {}", request.getCompositeId());

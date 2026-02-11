@@ -1,7 +1,6 @@
 package uz.greenwhite.gateway.kafka.consumer;
 
 import io.micrometer.core.instrument.Timer;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -11,24 +10,25 @@ import uz.greenwhite.gateway.config.RetryProperties;
 import uz.greenwhite.gateway.metrics.GatewayMetrics;
 import uz.greenwhite.gateway.model.enums.RequestStatus;
 import uz.greenwhite.gateway.model.kafka.ResponseMessage;
-import uz.greenwhite.gateway.oracle.BiruniClient;
+import uz.greenwhite.gateway.source.ResponseSinkClient;
 import uz.greenwhite.gateway.state.RequestStateService;
+import uz.greenwhite.gateway.model.ResponseSaveRequest;
 
 @Slf4j
 @Service
 public class ResponseConsumer {
 
-    private final BiruniClient biruniClient;
+    private final ResponseSinkClient responseSinkClient;
     private final RequestStateService requestStateService;
     private final RetryProperties retryProperties;
     private final GatewayMetrics metrics;
 
     public ResponseConsumer(
-            BiruniClient biruniClient,
+            ResponseSinkClient responseSinkClient,
             RequestStateService requestStateService,
             RetryProperties retryProperties,
             GatewayMetrics metrics) {
-        this.biruniClient = biruniClient;
+        this.responseSinkClient = responseSinkClient;
         this.requestStateService = requestStateService;
         this.retryProperties = retryProperties;
         this.metrics = metrics;
@@ -48,23 +48,23 @@ public class ResponseConsumer {
                 key, record.partition(), record.offset());
 
         try {
-            // ===== E5: Oracle Save with Timer =====
+            // E5: Save to data source with timer
             Timer.Sample saveSample = Timer.start(metrics.getRegistry());
 
-            boolean saved = saveToOracleWithRetry(message);
+            boolean saved = saveWithRetry(message);
 
             saveSample.stop(metrics.getOracleSaveTimer());
 
             if (saved) {
                 metrics.getOracleSaveSuccess().increment();
                 requestStateService.updateStatus(key, RequestStatus.COMPLETED);
-                log.info("Response saved to Oracle successfully: {}", key);
+                log.info("Response saved successfully: {}", key);
             } else {
                 metrics.getOracleSaveError().increment();
-                saveErrorToOracle(message, "Failed to save response after " +
+                saveErrorResponse(message, "Failed to save response after " +
                         retryProperties.getMaxAttempts() + " attempts");
                 requestStateService.updateStatus(key, RequestStatus.FAILED);
-                log.error("E5: Failed to save response to Oracle after retries: {}", key);
+                log.error("E5: Failed to save response after retries: {}", key);
             }
 
             ack.acknowledge();
@@ -73,7 +73,7 @@ public class ResponseConsumer {
             metrics.getOracleSaveError().increment();
             log.error("E5: Error processing response {}: {}", key, e.getMessage(), e);
 
-            saveErrorToOracle(message, e.getMessage());
+            saveErrorResponse(message, e.getMessage());
             requestStateService.updateStatus(key, RequestStatus.FAILED);
 
             ack.acknowledge();
@@ -81,32 +81,32 @@ public class ResponseConsumer {
     }
 
     /**
-     * Save response to Oracle with retry
+     * Save response to data source with retry logic
      */
-    private boolean saveToOracleWithRetry(ResponseMessage message) {
+    private boolean saveWithRetry(ResponseMessage message) {
         String key = message.getCompositeId();
 
         for (int attempt = 1; attempt <= retryProperties.getMaxAttempts(); attempt++) {
             try {
-                log.debug("Saving response to Oracle: {} (attempt {}/{})",
+                log.debug("Saving response: {} (attempt {}/{})",
                         key, attempt, retryProperties.getMaxAttempts());
 
                 var saveRequest = buildSaveRequest(message);
-                boolean saved = biruniClient.saveResponse(saveRequest);
+                boolean saved = responseSinkClient.saveResponse(saveRequest);
 
                 if (saved) {
                     return true;
                 }
 
-                log.warn("E5: Oracle save returned false for {}: attempt {}/{}",
+                log.warn("E5: Save returned false for {}: attempt {}/{}",
                         key, attempt, retryProperties.getMaxAttempts());
 
             } catch (Exception e) {
-                log.warn("E5: Oracle save failed for {}: attempt {}/{} - {}",
+                log.warn("E5: Save failed for {}: attempt {}/{} - {}",
                         key, attempt, retryProperties.getMaxAttempts(), e.getMessage());
             }
 
-            // ===== E5: Retry metric (har bir qayta urinish) =====
+            // E5: Retry metric for each retry attempt
             if (attempt < retryProperties.getMaxAttempts()) {
                 metrics.getOracleSaveRetry().increment();
                 sleepBeforeRetry();
@@ -117,41 +117,44 @@ public class ResponseConsumer {
     }
 
     /**
-     * Save error response to Oracle
+     * Save error response to data source
      */
-    private void saveErrorToOracle(ResponseMessage message, String errorMessage) {
+    private void saveErrorResponse(ResponseMessage message, String errorMessage) {
         String key = message.getCompositeId();
 
         try {
-            log.debug("Saving error response to Oracle: {}", key);
+            log.debug("Saving error response: {}", key);
 
-            var errorRequest = BiruniClient.ResponseSaveRequest.builder()
+            var errorRequest = ResponseSaveRequest.builder()
                     .companyId(message.getCompanyId())
                     .requestId(message.getRequestId())
                     .response(null)
                     .errorMessage(errorMessage)
                     .build();
 
-            biruniClient.saveResponse(errorRequest);
-            log.info("Error response saved to Oracle: {}", key);
+            responseSinkClient.saveResponse(errorRequest);
+            log.info("Error response saved: {}", key);
 
         } catch (Exception e) {
-            log.error("E5: Failed to save error response to Oracle: {} - {}", key, e.getMessage());
+            log.error("E5: Failed to save error response: {} - {}", key, e.getMessage());
         }
     }
 
-    private BiruniClient.ResponseSaveRequest buildSaveRequest(ResponseMessage message) {
-        BiruniClient.ResponseSaveRequest.ResponseData responseData = null;
+    /**
+     * Build save request from response message
+     */
+    private ResponseSaveRequest buildSaveRequest(ResponseMessage message) {
+        ResponseSaveRequest.ResponseData responseData = null;
 
         if (message.isSuccess()) {
-            responseData = BiruniClient.ResponseSaveRequest.ResponseData.builder()
+            responseData = ResponseSaveRequest.ResponseData.builder()
                     .status(message.getHttpStatus())
                     .contentType(message.getContentType())
                     .body(message.getBody())
                     .build();
         }
 
-        return BiruniClient.ResponseSaveRequest.builder()
+        return ResponseSaveRequest.builder()
                 .companyId(message.getCompanyId())
                 .requestId(message.getRequestId())
                 .response(responseData)

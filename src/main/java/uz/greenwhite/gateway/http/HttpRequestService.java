@@ -39,20 +39,21 @@ public class HttpRequestService {
 
         circuitBreaker.getEventPublisher()
                 .onStateTransition(event ->
-                        log.warn("⚡ Circuit Breaker state change: {}", event.getStateTransition()))
+                        log.warn("Circuit Breaker state change: {}", event.getStateTransition()))
                 .onFailureRateExceeded(event ->
-                        log.warn("⚠ Circuit Breaker failure rate exceeded: {}%", event.getFailureRate()))
+                        log.warn("Circuit Breaker failure rate exceeded: {}%", event.getFailureRate()))
                 .onSlowCallRateExceeded(event ->
-                        log.warn("⚠ Circuit Breaker slow call rate exceeded: {}%", event.getSlowCallRate()));
+                        log.warn("Circuit Breaker slow call rate exceeded: {}%", event.getSlowCallRate()));
     }
 
     /**
-     * Send HTTP request with Circuit Breaker + OAuth2 support
+     * Send HTTP request with Circuit Breaker protection and OAuth2 support.
+     * Returns a Mono that resolves to a ResponseMessage (success or error).
      */
     public Mono<ResponseMessage> sendRequest(RequestMessage request) {
         String compositeId = request.getCompositeId();
 
-        // 1. Circuit Breaker OPEN bo'lsa — darhol reject
+        // 1. If Circuit Breaker is OPEN — reject immediately
         try {
             circuitBreaker.acquirePermission();
         } catch (CallNotPermittedException ex) {
@@ -60,8 +61,15 @@ public class HttpRequestService {
             return Mono.just(buildCircuitBreakerResponse(request));
         }
 
-        // 2. OAuth2 Authorization header qo'shish
-        Map<String, String> headers = addAuthorizationHeader(request);
+        // 2. Add OAuth2 Authorization header (fails fast if token unavailable)
+        Map<String, String> headers;
+        try {
+            headers = addAuthorizationHeader(request);
+        } catch (OAuth2TokenException e) {
+            log.error("OAuth2 token failed, skipping HTTP call: {}", compositeId);
+            circuitBreaker.onSuccess(0, java.util.concurrent.TimeUnit.NANOSECONDS);
+            return Mono.just(buildOAuth2ErrorResponse(request, e.getMessage()));
+        }
 
         long startTime = System.nanoTime();
         String fullUrl = buildFullUrl(request);
@@ -101,8 +109,8 @@ public class HttpRequestService {
     // ==================== OAUTH2 ====================
 
     /**
-     * OAuth2 token olish va headers'ga qo'shish
-     * Eski tizim pattern: RequestMessageProcessorService.addAuthorizationHeader()
+     * Get OAuth2 token and add Authorization header.
+     * Throws OAuth2TokenException if token acquisition fails.
      */
     private Map<String, String> addAuthorizationHeader(RequestMessage request) {
         Map<String, String> headers = request.getHeaders() != null
@@ -120,6 +128,8 @@ public class HttpRequestService {
         } catch (Exception e) {
             log.error("Failed to get OAuth2 token for provider {}: {}",
                     request.getOauth2Provider(), e.getMessage());
+            throw new OAuth2TokenException(
+                    "OAuth2 token acquisition failed for provider: " + request.getOauth2Provider(), e);
         }
 
         return headers;
@@ -127,6 +137,9 @@ public class HttpRequestService {
 
     // ==================== HELPERS ====================
 
+    /**
+     * Build full URL from base URL, URI path, and query parameters.
+     */
     private String buildFullUrl(RequestMessage request) {
         StringBuilder url = new StringBuilder(request.getBaseUrl());
 
@@ -141,13 +154,23 @@ public class HttpRequestService {
         return url.toString();
     }
 
+    /**
+     * Apply custom headers to the HTTP request.
+     * Sets default Content-Type to JSON only if not already provided.
+     */
     private void applyHeaders(HttpHeaders httpHeaders, Map<String, String> customHeaders) {
-        httpHeaders.setContentType(MediaType.APPLICATION_JSON);
         if (customHeaders != null) {
             customHeaders.forEach(httpHeaders::add);
         }
+
+        if (httpHeaders.getContentType() == null) {
+            httpHeaders.setContentType(MediaType.APPLICATION_JSON);
+        }
     }
 
+    /**
+     * Build response for when Circuit Breaker is OPEN (503).
+     */
     private ResponseMessage buildCircuitBreakerResponse(RequestMessage request) {
         return ResponseMessage.builder()
                 .companyId(request.getCompanyId())
@@ -159,6 +182,23 @@ public class HttpRequestService {
                 .build();
     }
 
+    /**
+     * Build response for OAuth2 token acquisition failure (401).
+     */
+    private ResponseMessage buildOAuth2ErrorResponse(RequestMessage request, String errorMessage) {
+        return ResponseMessage.builder()
+                .companyId(request.getCompanyId())
+                .requestId(request.getRequestId())
+                .httpStatus(401)
+                .errorMessage(errorMessage)
+                .errorSource("OAUTH2")
+                .processedAt(LocalDateTime.now())
+                .build();
+    }
+
+    /**
+     * Build response for successful HTTP call.
+     */
     private ResponseMessage buildSuccessResponse(RequestMessage request, int status,
                                                  String contentType, String body) {
         return ResponseMessage.builder()
@@ -171,6 +211,10 @@ public class HttpRequestService {
                 .build();
     }
 
+    /**
+     * Build response for failed HTTP call.
+     * Extracts status code from WebClientResponseException if available.
+     */
     private ResponseMessage buildErrorResponse(RequestMessage request, Throwable ex) {
         int httpStatus = 500;
         String errorMessage = ex.getMessage();

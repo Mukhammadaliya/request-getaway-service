@@ -58,17 +58,17 @@ public class TelegramNotificationService implements NotificationService {
             sb.append("🔗 <b>URL:</b> <code>").append(escapeHtml(msg.getUrl())).append("</code>\n");
         }
 
-        sb.append("❌ <b>Sabab:</b> [").append(msg.getErrorSource()).append("] ");
+        sb.append("❌ <b>Reason:</b> [").append(msg.getErrorSource()).append("] ");
         sb.append(escapeHtml(truncate(msg.getFailureReason(), 200))).append("\n");
 
         if (msg.getHttpStatus() > 0) {
             sb.append("📡 <b>HTTP Status:</b> ").append(msg.getHttpStatus()).append("\n");
         }
 
-        sb.append("🔄 <b>Urinishlar:</b> ").append(msg.getAttemptCount()).append("\n");
+        sb.append("🔄 <b>Attempts:</b> ").append(msg.getAttemptCount()).append("\n");
 
         if (msg.getFailedAt() != null) {
-            sb.append("🕐 <b>Vaqt:</b> ").append(msg.getFailedAt().format(FORMATTER)).append("\n");
+            sb.append("🕐 <b>Time:</b> ").append(msg.getFailedAt().format(FORMATTER)).append("\n");
         }
 
         sb.append("━━━━━━━━━━━━━━━━━━━━━");
