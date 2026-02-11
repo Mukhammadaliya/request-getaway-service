@@ -2,13 +2,14 @@ package uz.greenwhite.gateway.controller;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import uz.greenwhite.gateway.kafka.producer.RequestProducer;
 import uz.greenwhite.gateway.model.RequestState;
-import uz.greenwhite.gateway.model.kafka.RequestMessage;
 import uz.greenwhite.gateway.model.kafka.DlqMessage;
-import uz.greenwhite.gateway.notification.TelegramNotificationService;
+import uz.greenwhite.gateway.model.kafka.RequestMessage;
+import uz.greenwhite.gateway.notification.NotificationService;
 import uz.greenwhite.gateway.state.RequestStateService;
 
 import java.time.LocalDateTime;
@@ -16,18 +17,19 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Test controller for manual testing
- * DELETE THIS IN PRODUCTION!
+ * Test controller for manual testing.
+ * Only available when profile is "dev".
  */
 @Slf4j
 @RestController
 @RequestMapping("/api/test")
 @RequiredArgsConstructor
+@Profile("dev")
 public class TestController {
 
     private final RequestProducer requestProducer;
     private final RequestStateService requestStateService;
-    private final TelegramNotificationService telegramService;
+    private final NotificationService notificationService;
 
     /**
      * Send test request to Kafka
@@ -36,13 +38,12 @@ public class TestController {
      */
     @PostMapping("/send")
     public ResponseEntity<Map<String, Object>> sendTestRequest() {
-        // Create test request
         RequestMessage request = RequestMessage.builder()
                 .companyId(100L)
-                .requestId(System.currentTimeMillis())  // Unique ID
+                .requestId(System.currentTimeMillis())
                 .filialId(1L)
                 .endpointId(1L)
-                .baseUrl("https://httpbin.org")  // Free test API
+                .baseUrl("https://httpbin.org")
                 .uri("/post")
                 .method("POST")
                 .headers(Map.of("X-Test-Header", "test-value"))
@@ -52,10 +53,8 @@ public class TestController {
                 .createdAt(LocalDateTime.now())
                 .build();
 
-        // Send to Kafka
         requestProducer.sendRequest(request);
 
-        // Response
         Map<String, Object> response = new HashMap<>();
         response.put("status", "sent");
         response.put("compositeId", request.getCompositeId());
@@ -94,12 +93,10 @@ public class TestController {
         ));
     }
 
-
     /**
      * Send test request WITH OAuth2 to Kafka
      *
      * Example: POST http://localhost:8090/api/test/send-oauth2
-     * Example: POST http://localhost:8090/api/test/send-oauth2?provider=smartup
      */
     @PostMapping("/send-oauth2")
     public ResponseEntity<Map<String, Object>> sendTestOAuth2Request(
@@ -133,7 +130,7 @@ public class TestController {
     }
 
     /**
-     * Test DLQ → Telegram notification
+     * Test DLQ → notification
      *
      * Example: POST http://localhost:8090/api/test/dlq
      */
@@ -149,7 +146,7 @@ public class TestController {
                 .attemptCount(3)
                 .url("POST https://api.example.com/v1/students")
                 .body("{\"test\": \"data\"}")
-                .failedAt(java.time.LocalDateTime.now())
+                .failedAt(LocalDateTime.now())
                 .build();
 
         requestProducer.sendToDlq(dlqMessage);
@@ -157,7 +154,8 @@ public class TestController {
         Map<String, Object> response = new HashMap<>();
         response.put("status", "sent_to_dlq");
         response.put("compositeId", dlqMessage.getCompositeId());
-        response.put("message", "Check Telegram for notification");
+        response.put("notification_enabled", notificationService.isEnabled());
+        response.put("message", "DLQ message sent");
         return ResponseEntity.ok(response);
     }
 }

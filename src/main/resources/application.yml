@@ -3,12 +3,15 @@ spring:
     timeout-per-shutdown-phase: 30s
   application:
     name: request-gateway-service
+  profiles:
+    active: dev
 
-  # Kafka
+  # Kafka — Spring auto-config (serializer/deserializer)
+  # bootstrap-servers va group-id gateway.kafka dan olinadi
   kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:19092}
+    bootstrap-servers: ${gateway.kafka.bootstrap-servers}
     consumer:
-      group-id: gateway-service-group
+      group-id: ${gateway.kafka.group-id}
       auto-offset-reset: earliest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
@@ -24,12 +27,10 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
 
-  # Oracle (hozircha disable, keyinroq enable qilamiz)
+  # Oracle (hozircha disable)
   autoconfigure:
     exclude:
       - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
-
-  # Redis enabled
 
 # Server
 server:
@@ -48,25 +49,21 @@ management:
     health:
       show-details: always
 
-# Gateway settings
+# ============================================================
+# GATEWAY CONFIGURATION (barcha custom config shu yerda)
+# ============================================================
 gateway:
-  polling:
-    enabled: true
-    interval-ms: 5000
-    batch-size: 100
-  http:
-    connect-timeout-ms: 10000
-    read-timeout-ms: 30000
-    write-timeout-ms: 30000
-  retry:
-    max-attempts: 3
-    interval-ms: 3000
-    retryable-statuses: 408,429,500,502,503,504
+
+  # Kafka
   kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:19092}
+    group-id: gateway-service-group
     topics:
       request-new: bmb.request.new
       request-response: bmb.request.response
       request-dlq: bmb.request.dlq
+
+  # Oracle (Biruni) connection
   biruni:
     base-url: http://localhost:8080/smartup24
     username: admin@head
@@ -74,6 +71,26 @@ gateway:
     request-pull-uri: /b/biruni/bmb/requests$pull
     response-save-uri: /b/biruni/bmb/requests$save
     connection-timeout: 60
+
+  # Polling (Oracle dan pull qilish)
+  polling:
+    enabled: true
+    interval-ms: 5000
+    batch-size: 100
+
+  # HTTP client (tashqi API ga request)
+  http:
+    connect-timeout-ms: 10000
+    read-timeout-ms: 30000
+    write-timeout-ms: 30000
+
+  # Retry
+  retry:
+    max-attempts: 3
+    interval-ms: 3000
+    retryable-statuses: 408,429,500,502,503,504
+
+  # Dynamic concurrency
   concurrency:
     min-concurrency: 10
     max-concurrency: 15
@@ -83,6 +100,8 @@ gateway:
     scale-step: 2
     scale-cooldown-ms: 30000
     topic-partitions: 10
+
+  # OAuth2
   oauth2:
     providers:
       smartup:
@@ -91,6 +110,8 @@ gateway:
         client-id: 12344432421
         client-secret: ASLKDGHAJGF1341ASGHFAGFHj
         scope: read+write
+
+  # Telegram notification
   telegram:
     enabled: true
     bot-token: "8318506270:AAGzEwBW46VE-_K_Z__Gcuh8MiPOvBdaVMM"

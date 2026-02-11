@@ -8,7 +8,6 @@ import uz.greenwhite.gateway.model.RequestState;
 import uz.greenwhite.gateway.model.enums.ErrorSource;
 import uz.greenwhite.gateway.model.enums.RequestStatus;
 
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
@@ -84,7 +83,10 @@ public class RequestStateService {
      */
     public void markFailed(String compositeId, String error, ErrorSource source) {
         getState(compositeId).ifPresent(state -> {
-            state.markFailed(error, source);
+            state.setStatus(RequestStatus.FAILED);
+            state.setLastError(error);
+            state.setErrorSource(source);
+            state.setUpdatedAt(LocalDateTime.now());
             saveState(state);
             log.warn("Request marked as failed: {} - {}", compositeId, error);
         });
@@ -97,7 +99,8 @@ public class RequestStateService {
         Optional<RequestState> stateOpt = getState(compositeId);
         if (stateOpt.isPresent()) {
             RequestState state = stateOpt.get();
-            state.incrementAttempt();
+            state.setAttemptCount(state.getAttemptCount() + 1);
+            state.setUpdatedAt(LocalDateTime.now());
             saveState(state);
             return state.getAttemptCount();
         }
@@ -132,7 +135,7 @@ public class RequestStateService {
         String key = LOCK_PREFIX + compositeId;
         Boolean acquired = redisTemplate.opsForValue()
                 .setIfAbsent(key, LocalDateTime.now().toString(),
-                        Duration.ofSeconds(LOCK_TTL_SECONDS));
+                        LOCK_TTL_SECONDS, TimeUnit.SECONDS);
 
         if (Boolean.TRUE.equals(acquired)) {
             log.debug("Lock acquired: {}", compositeId);

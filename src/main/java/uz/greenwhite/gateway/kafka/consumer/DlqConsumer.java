@@ -7,19 +7,19 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Service;
 import uz.greenwhite.gateway.model.kafka.DlqMessage;
-import uz.greenwhite.gateway.notification.TelegramNotificationService;
+import uz.greenwhite.gateway.notification.NotificationService;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class DlqConsumer {
 
-    private final TelegramNotificationService telegramService;
+    private final NotificationService notificationService;
 
     @KafkaListener(
             id = "dlqConsumer",
             topics = "${gateway.kafka.topics.request-dlq}",
-            groupId = "${spring.kafka.consumer.group-id}",
+            groupId = "${gateway.kafka.group-id}",
             containerFactory = "dlqConsumerFactory"
     )
     public void consumeDlq(ConsumerRecord<String, DlqMessage> record, Acknowledgment ack) {
@@ -30,7 +30,7 @@ public class DlqConsumer {
                 key, record.partition(), record.offset());
 
         try {
-            telegramService.sendDlqAlert(message);
+            notificationService.sendDlqAlert(message);
         } catch (Exception e) {
             log.error("Failed to process DLQ message {}: {}", key, e.getMessage());
         }

@@ -5,9 +5,9 @@ import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Component;
+import uz.greenwhite.gateway.config.KafkaProperties;
 
 import static uz.greenwhite.gateway.concurrency.ConcurrencyMonitorService.REQUEST_LISTENER_ID;
 import static uz.greenwhite.gateway.concurrency.ConcurrencyMonitorService.RESPONSE_LISTENER_ID;
@@ -20,22 +20,19 @@ public class ConcurrencyMetrics {
     private final DynamicConcurrencyManager concurrencyManager;
     private final ConcurrencyMonitorService monitorService;
     private final ThreadPoolTaskExecutor httpExecutor;
-
-    @Value("${gateway.kafka.topics.request-new}")
-    private String requestNewTopic;
-
-    @Value("${gateway.kafka.topics.request-response}")
-    private String requestResponseTopic;
+    private final KafkaProperties kafkaProperties;
 
     public ConcurrencyMetrics(
             MeterRegistry meterRegistry,
             DynamicConcurrencyManager concurrencyManager,
             ConcurrencyMonitorService monitorService,
-            @Qualifier("httpRequestExecutor") ThreadPoolTaskExecutor httpExecutor) {
+            @Qualifier("httpRequestExecutor") ThreadPoolTaskExecutor httpExecutor,
+            KafkaProperties kafkaProperties) {
         this.meterRegistry = meterRegistry;
         this.concurrencyManager = concurrencyManager;
         this.monitorService = monitorService;
         this.httpExecutor = httpExecutor;
+        this.kafkaProperties = kafkaProperties;
     }
 
     @PostConstruct
@@ -50,7 +47,7 @@ public class ConcurrencyMetrics {
                 .register(meterRegistry);
 
         Gauge.builder("gateway.kafka.consumer.lag",
-                        () -> monitorService.getLastKnownLag(requestNewTopic))
+                        () -> monitorService.getLastKnownLag(kafkaProperties.getTopics().getRequestNew()))
                 .description("Current Kafka consumer lag")
                 .tag("topic", "request-new")
                 .tag("listener", REQUEST_LISTENER_ID)
@@ -65,7 +62,7 @@ public class ConcurrencyMetrics {
                 .register(meterRegistry);
 
         Gauge.builder("gateway.kafka.consumer.lag",
-                        () -> monitorService.getLastKnownLag(requestResponseTopic))
+                        () -> monitorService.getLastKnownLag(kafkaProperties.getTopics().getRequestResponse()))
                 .description("Current Kafka consumer lag")
                 .tag("topic", "request-response")
                 .tag("listener", RESPONSE_LISTENER_ID)
@@ -74,23 +71,17 @@ public class ConcurrencyMetrics {
         // ==================== HTTP THREAD POOL METRICS ====================
 
         Gauge.builder("gateway.http.pool.active", httpExecutor::getActiveCount)
-                .description("Currently active HTTP request threads")
+                .description("Active HTTP request threads")
                 .register(meterRegistry);
 
-        Gauge.builder("gateway.http.pool.size", httpExecutor.getThreadPoolExecutor()::getPoolSize)
+        Gauge.builder("gateway.http.pool.size", httpExecutor::getPoolSize)
                 .description("Current HTTP thread pool size")
                 .register(meterRegistry);
 
         Gauge.builder("gateway.http.pool.queue", () -> httpExecutor.getThreadPoolExecutor().getQueue().size())
-                .description("Tasks waiting in HTTP thread pool queue")
+                .description("HTTP thread pool queue size")
                 .register(meterRegistry);
 
-        Gauge.builder("gateway.http.pool.completed",
-                        httpExecutor.getThreadPoolExecutor()::getCompletedTaskCount)
-                .description("Total completed HTTP tasks")
-                .register(meterRegistry);
-
-        log.info("Concurrency metrics registered for [{}] and [{}]",
-                REQUEST_LISTENER_ID, RESPONSE_LISTENER_ID);
+        log.info("Concurrency metrics registered");
     }
 }

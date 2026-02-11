@@ -9,10 +9,10 @@ import org.apache.kafka.clients.admin.ListOffsetsResult;
 import org.apache.kafka.clients.admin.OffsetSpec;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import uz.greenwhite.gateway.config.ConcurrencyProperties;
+import uz.greenwhite.gateway.config.KafkaProperties;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -27,15 +27,7 @@ public class ConcurrencyMonitorService {
     private final AdminClient adminClient;
     private final DynamicConcurrencyManager concurrencyManager;
     private final ConcurrencyProperties properties;
-
-    @Value("${spring.kafka.consumer.group-id}")
-    private String consumerGroupId;
-
-    @Value("${gateway.kafka.topics.request-new}")
-    private String requestNewTopic;
-
-    @Value("${gateway.kafka.topics.request-response}")
-    private String requestResponseTopic;
+    private final KafkaProperties kafkaProperties;
 
     /**
      * Listener ID lar — @KafkaListener(id = "...") bilan bir xil
@@ -48,7 +40,9 @@ public class ConcurrencyMonitorService {
     @PostConstruct
     public void init() {
         log.info("ConcurrencyMonitor started: group={}, topics=[{}, {}], interval={}ms",
-                consumerGroupId, requestNewTopic, requestResponseTopic,
+                kafkaProperties.getGroupId(),
+                kafkaProperties.getTopics().getRequestNew(),
+                kafkaProperties.getTopics().getRequestResponse(),
                 properties.getMonitorIntervalMs());
     }
 
@@ -62,20 +56,22 @@ public class ConcurrencyMonitorService {
             Map<TopicPartition, OffsetAndMetadata> allCommittedOffsets = getCommittedOffsets();
 
             if (allCommittedOffsets == null || allCommittedOffsets.isEmpty()) {
-                log.debug("No committed offsets found for group: {}", consumerGroupId);
+                log.debug("No committed offsets found for group: {}", kafkaProperties.getGroupId());
                 return;
             }
 
             // 2. Request topic lag → RequestConsumer scaling
-            long requestLag = calculateLagForTopic(requestNewTopic, allCommittedOffsets);
-            lagMap.put(requestNewTopic, requestLag);
-            log.debug("Consumer lag [{}]: {} messages", requestNewTopic, requestLag);
+            String requestTopic = kafkaProperties.getTopics().getRequestNew();
+            long requestLag = calculateLagForTopic(requestTopic, allCommittedOffsets);
+            lagMap.put(requestTopic, requestLag);
+            log.debug("Consumer lag [{}]: {} messages", requestTopic, requestLag);
             concurrencyManager.adjustConcurrency(REQUEST_LISTENER_ID, requestLag);
 
             // 3. Response topic lag → ResponseConsumer scaling
-            long responseLag = calculateLagForTopic(requestResponseTopic, allCommittedOffsets);
-            lagMap.put(requestResponseTopic, responseLag);
-            log.debug("Consumer lag [{}]: {} messages", requestResponseTopic, responseLag);
+            String responseTopic = kafkaProperties.getTopics().getRequestResponse();
+            long responseLag = calculateLagForTopic(responseTopic, allCommittedOffsets);
+            lagMap.put(responseTopic, responseLag);
+            log.debug("Consumer lag [{}]: {} messages", responseTopic, responseLag);
             concurrencyManager.adjustConcurrency(RESPONSE_LISTENER_ID, responseLag);
 
         } catch (Exception e) {
@@ -84,10 +80,11 @@ public class ConcurrencyMonitorService {
     }
 
     /**
-     * Consumer group ning committed offset larini olish (bir marta, barcha topic lar uchun)
+     * Consumer group ning committed offset larini olish
      */
     private Map<TopicPartition, OffsetAndMetadata> getCommittedOffsets() throws Exception {
-        ListConsumerGroupOffsetsResult result = adminClient.listConsumerGroupOffsets(consumerGroupId);
+        ListConsumerGroupOffsetsResult result =
+                adminClient.listConsumerGroupOffsets(kafkaProperties.getGroupId());
         return result.partitionsToOffsetAndMetadata().get(10, TimeUnit.SECONDS);
     }
 
@@ -116,21 +113,17 @@ public class ConcurrencyMonitorService {
         // 3. Lag hisoblash
         long totalLag = 0;
         for (Map.Entry<TopicPartition, OffsetAndMetadata> entry : topicOffsets.entrySet()) {
-            TopicPartition partition = entry.getKey();
-            long committedOffset = entry.getValue().offset();
-
-            ListOffsetsResult.ListOffsetsResultInfo endOffsetInfo = endOffsets.get(partition);
-            if (endOffsetInfo != null) {
-                long partitionLag = Math.max(0, endOffsetInfo.offset() - committedOffset);
-                totalLag += partitionLag;
-            }
+            TopicPartition tp = entry.getKey();
+            long committed = entry.getValue().offset();
+            long end = endOffsets.containsKey(tp) ? endOffsets.get(tp).offset() : committed;
+            totalLag += Math.max(0, end - committed);
         }
 
         return totalLag;
     }
 
     /**
-     * Metrics uchun — topic bo'yicha oxirgi bilgan lag
+     * Tashqi classlar uchun lag olish (metrics, health)
      */
     public long getLastKnownLag(String topicName) {
         return lagMap.getOrDefault(topicName, 0L);

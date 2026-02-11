@@ -16,8 +16,8 @@ import java.util.Map;
 
 @Slf4j
 @Service
-@ConditionalOnProperty(name = "gateway.telegram.enabled", havingValue = "true", matchIfMissing = true)
-public class TelegramNotificationService {
+@ConditionalOnProperty(name = "gateway.telegram.enabled", havingValue = "true")
+public class TelegramNotificationService implements NotificationService {
 
     private final TelegramProperties properties;
     private final RestTemplate restTemplate;
@@ -27,8 +27,10 @@ public class TelegramNotificationService {
     public TelegramNotificationService(TelegramProperties properties) {
         this.properties = properties;
         this.restTemplate = new RestTemplate();
+        log.info("Telegram notification ENABLED: chatId={}", properties.getChatId());
     }
 
+    @Override
     public void sendDlqAlert(DlqMessage message) {
         try {
             String text = formatMessage(message);
@@ -38,6 +40,11 @@ public class TelegramNotificationService {
             log.error("Failed to send DLQ alert to Telegram: {} - {}",
                     message.getCompositeId(), e.getMessage());
         }
+    }
+
+    @Override
+    public boolean isEnabled() {
+        return true;
     }
 
     private String formatMessage(DlqMessage msg) {
@@ -83,8 +90,7 @@ public class TelegramNotificationService {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
 
-        HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
-        restTemplate.postForObject(url, request, String.class);
+        restTemplate.postForEntity(url, new HttpEntity<>(body, headers), String.class);
     }
 
     private String escapeHtml(String text) {
@@ -95,7 +101,7 @@ public class TelegramNotificationService {
     }
 
     private String truncate(String text, int maxLength) {
-        if (text == null) return "N/A";
+        if (text == null) return "";
         if (text.length() <= maxLength) return text;
         return text.substring(0, maxLength) + "...";
     }

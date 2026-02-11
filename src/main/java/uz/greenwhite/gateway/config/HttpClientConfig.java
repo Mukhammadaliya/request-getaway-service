@@ -3,7 +3,7 @@ package uz.greenwhite.gateway.config;
 import io.netty.channel.ChannelOption;
 import io.netty.handler.timeout.ReadTimeoutHandler;
 import io.netty.handler.timeout.WriteTimeoutHandler;
-import org.springframework.beans.factory.annotation.Value;
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
@@ -15,29 +15,21 @@ import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 
 @Configuration
+@RequiredArgsConstructor
 public class HttpClientConfig {
 
-    @Value("${gateway.http.connect-timeout-ms:10000}")
-    private int connectTimeout;
-
-    @Value("${gateway.http.read-timeout-ms:30000}")
-    private int readTimeout;
-
-    @Value("${gateway.http.write-timeout-ms:30000}")
-    private int writeTimeout;
+    private final HttpProperties httpProperties;
 
     @Bean
     public WebClient webClient() {
-        // Configure Netty HttpClient
         HttpClient httpClient = HttpClient.create()
-                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, connectTimeout)
-                .responseTimeout(Duration.ofMillis(readTimeout))
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, httpProperties.getConnectTimeoutMs())
+                .responseTimeout(Duration.ofMillis(httpProperties.getReadTimeoutMs()))
                 .doOnConnected(conn -> conn
-                        .addHandlerLast(new ReadTimeoutHandler(readTimeout, TimeUnit.MILLISECONDS))
-                        .addHandlerLast(new WriteTimeoutHandler(writeTimeout, TimeUnit.MILLISECONDS))
+                        .addHandlerLast(new ReadTimeoutHandler(httpProperties.getReadTimeoutMs(), TimeUnit.MILLISECONDS))
+                        .addHandlerLast(new WriteTimeoutHandler(httpProperties.getWriteTimeoutMs(), TimeUnit.MILLISECONDS))
                 );
 
-        // Configure exchange strategies (max memory size for response)
         ExchangeStrategies strategies = ExchangeStrategies.builder()
                 .codecs(configurer -> configurer
                         .defaultCodecs()
