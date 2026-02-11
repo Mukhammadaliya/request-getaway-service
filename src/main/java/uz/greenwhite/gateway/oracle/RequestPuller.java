@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 import uz.greenwhite.gateway.config.RetryProperties;
 import uz.greenwhite.gateway.kafka.producer.RequestProducer;
 import uz.greenwhite.gateway.metrics.GatewayMetrics;
+import uz.greenwhite.gateway.model.kafka.DlqMessage;
 import uz.greenwhite.gateway.model.kafka.RequestMessage;
 
 import java.util.ArrayList;
@@ -140,7 +141,8 @@ public class RequestPuller {
      */
     private void sendToDlq(RequestMessage request, String errorMessage) {
         try {
-            requestProducer.sendToDlq(request.getCompositeId(), request, errorMessage);
+            DlqMessage dlqMessage = DlqMessage.from(request, errorMessage, "KAFKA", 0, retryProperties.getMaxAttempts());
+            requestProducer.sendToDlq(dlqMessage);
             metrics.getDlqSent().increment();
             log.info("Request sent to DLQ: {}", request.getCompositeId());
         } catch (Exception e) {

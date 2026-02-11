@@ -91,6 +91,11 @@ gateway:
         client-id: 12344432421
         client-secret: ASLKDGHAJGF1341ASGHFAGFHj
         scope: read+write
+  telegram:
+    enabled: true
+    bot-token: "8318506270:AAGzEwBW46VE-_K_Z__Gcuh8MiPOvBdaVMM"
+    chat-id: -1002508752139
+    message-thread-id: 3716
 
 # Logging
 logging:

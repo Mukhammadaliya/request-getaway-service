@@ -14,6 +14,7 @@ import uz.greenwhite.gateway.kafka.producer.RequestProducer;
 import uz.greenwhite.gateway.metrics.GatewayMetrics;
 import uz.greenwhite.gateway.model.enums.ErrorSource;
 import uz.greenwhite.gateway.model.enums.RequestStatus;
+import uz.greenwhite.gateway.model.kafka.DlqMessage;
 import uz.greenwhite.gateway.model.kafka.RequestMessage;
 import uz.greenwhite.gateway.model.kafka.ResponseMessage;
 import uz.greenwhite.gateway.state.RequestStateService;
@@ -192,7 +193,11 @@ public class RequestConsumer {
                                         int httpStatus, String errorMessage, ErrorSource source) {
         log.error("E4: Request failed permanently: {} - status={}, error={}, source={}",
                 key, httpStatus, errorMessage, source);
-        requestProducer.sendToDlq(key, message, "[" + source + "] " + errorMessage);
+
+        int attemptCount = requestStateService.getAttemptCount(key);
+        DlqMessage dlqMessage = DlqMessage.from(message, errorMessage, source.name(), httpStatus, attemptCount);
+        requestProducer.sendToDlq(dlqMessage);
+
         metrics.getDlqSent().increment();
         requestStateService.updateStatus(key, RequestStatus.FAILED);
     }

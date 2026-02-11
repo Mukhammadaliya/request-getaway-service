@@ -8,6 +8,7 @@ import org.springframework.kafka.support.SendResult;
 import org.springframework.stereotype.Service;
 import uz.greenwhite.gateway.model.kafka.RequestMessage;
 import uz.greenwhite.gateway.model.kafka.ResponseMessage;
+import uz.greenwhite.gateway.model.kafka.DlqMessage;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -70,15 +71,19 @@ public class RequestProducer {
     /**
      * Send failed message to DLQ
      */
-    public CompletableFuture<SendResult<String, Object>> sendToDlq(String key, Object message, String errorReason) {
-        log.warn("Sending to DLQ: {} - Reason: {}", key, errorReason);
+    public CompletableFuture<SendResult<String, Object>> sendToDlq(DlqMessage dlqMessage) {
+        String key = dlqMessage.getCompositeId();
+        log.warn("Sending to DLQ: {} - Reason: {}", key, dlqMessage.getFailureReason());
 
-        return kafkaTemplate.send(requestDlqTopic, key, message)
+        return kafkaTemplate.send(requestDlqTopic, key, dlqMessage)
                 .whenComplete((result, ex) -> {
                     if (ex != null) {
                         log.error("Failed to send to DLQ {}: {}", key, ex.getMessage());
                     } else {
-                        log.info("Message sent to DLQ: {}", key);
+                        log.info("Message sent to DLQ: {} [partition={}, offset={}]",
+                                key,
+                                result.getRecordMetadata().partition(),
+                                result.getRecordMetadata().offset());
                     }
                 });
     }

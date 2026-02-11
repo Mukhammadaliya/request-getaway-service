@@ -136,4 +136,21 @@ public class KafkaConfig {
 
         return factory;
     }
+
+    /**
+     * DLQ consumer — Telegram notification uchun, past concurrency
+     */
+    @Bean("dlqConsumerFactory")
+    public ConcurrentKafkaListenerContainerFactory<String, Object> dlqListenerContainerFactory() {
+        ConcurrentKafkaListenerContainerFactory<String, Object> factory =
+                new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(consumerFactory());
+        factory.setConcurrency(1);
+        factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL);
+        factory.getContainerProperties().setIdleBetweenPolls(500);
+
+        log.info("DLQ consumer factory created with concurrency: 1");
+
+        return factory;
+    }
 }

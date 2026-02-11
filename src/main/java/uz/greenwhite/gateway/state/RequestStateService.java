@@ -158,4 +158,13 @@ public class RequestStateService {
         String key = LOCK_PREFIX + compositeId;
         return Boolean.TRUE.equals(redisTemplate.hasKey(key));
     }
+
+    /**
+     * Get current attempt count
+     */
+    public int getAttemptCount(String compositeId) {
+        return getState(compositeId)
+                .map(RequestState::getAttemptCount)
+                .orElse(0);
+    }
 }
