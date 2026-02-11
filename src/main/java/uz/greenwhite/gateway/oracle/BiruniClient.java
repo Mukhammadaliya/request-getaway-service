@@ -70,7 +70,7 @@ public class BiruniClient {
 
         } catch (Exception e) {
             log.error("Error pulling requests from Oracle: {}", e.getMessage(), e);
-            return List.of();
+            throw new RuntimeException("Oracle pull failed: " + e.getMessage(), e);
         }
     }
 

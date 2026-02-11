@@ -34,7 +34,7 @@ public class ThreadPoolConfig {
         executor.setMaxPoolSize(concurrencyProperties.getMaxConcurrency() * 2);
 
         // Queue — max pool ham to'lganda, shu queue da kutadi
-        executor.setQueueCapacity(200);
+        executor.setQueueCapacity(50);
 
         // Idle thread lar 60s dan keyin yo'q qilinadi
         executor.setKeepAliveSeconds(60);

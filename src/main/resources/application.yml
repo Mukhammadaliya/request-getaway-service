@@ -75,7 +75,7 @@ gateway:
     response-save-uri: /b/biruni/bmb/requests$save
     connection-timeout: 60
   concurrency:
-    min-concurrency: 3
+    min-concurrency: 10
     max-concurrency: 15
     monitor-interval-ms: 10000
     scale-up-threshold: 50
