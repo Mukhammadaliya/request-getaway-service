@@ -83,7 +83,7 @@ public class RequestConsumer {
                 return;
             }
 
-            // 3. HTTP ishni alohida thread pool ga topshirish
+            // 3. Delegate HTTP work to a separate thread pool
             CompletableFuture.runAsync(() -> {
                 try {
                     processRequest(key, message);
@@ -127,7 +127,7 @@ public class RequestConsumer {
         } catch (Exception e) {
             httpSample.stop(metrics.getHttpRequestTimer());
 
-            // Timeout yoki connection error?
+            // Timeout or connection error?
             if (isTimeoutException(e)) {
                 metrics.recordHttpTimeout();
                 log.error("E4: HTTP timeout for {}: {}", key, e.getMessage());

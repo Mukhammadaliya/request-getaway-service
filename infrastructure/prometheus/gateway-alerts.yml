@@ -1,7 +1,7 @@
 groups:
 
   # ============================================================
-  # 1. SERVICE HEALTH — Barcha servicelar UP/DOWN holati
+  # 1. SERVICE HEALTH — All services UP/DOWN status
   # ============================================================
   - name: service_health_alerts
     rules:
@@ -13,8 +13,8 @@ groups:
           severity: critical
           stage: service
         annotations:
-          summary: "🚨 Gateway Service ISHLAMAYAPTI"
-          description: "Gateway Service (host.docker.internal:8091) 30s davomida javob bermayapti. Polling, consumer, HTTP — hammasi to'xtagan."
+          summary: "🚨 Gateway Service NOT WORKING"
+          description: "Gateway Service (host.docker.internal:8091) has not responded for 30s. Polling, consumer, HTTP — everything has stopped."
 
       - alert: RedisDown
         expr: up{job="redis"} == 0
@@ -23,8 +23,8 @@ groups:
           severity: critical
           stage: service
         annotations:
-          summary: "🚨 Redis ISHLAMAYAPTI"
-          description: "Redis server javob bermayapti. State management, OAuth2 cache, lock — barchasi ishlamaydi."
+          summary: "🚨 Redis NOT WORKING"
+          description: "Redis server is not responding. State management, OAuth2 cache, lock — everything is down."
 
       - alert: RedPandaDown
         expr: up{job="redpanda"} == 0
@@ -33,8 +33,8 @@ groups:
           severity: critical
           stage: service
         annotations:
-          summary: "🚨 RedPanda/Kafka ISHLAMAYAPTI"
-          description: "Kafka broker javob bermayapti. Message produce/consume to'xtagan."
+          summary: "🚨 RedPanda/Kafka NOT WORKING"
+          description: "Kafka broker is not responding. Message produce/consume has stopped."
 
   # ============================================================
   # 2. JVM & SYSTEM RESOURCES — CPU, RAM, Memory, Threads
@@ -49,8 +49,8 @@ groups:
           severity: warning
           stage: system
         annotations:
-          summary: "⚠️ CPU yuklama yuqori"
-          description: "Gateway Service CPU: {{ $value | printf \"%.0f\" }}% (3 daqiqadan beri > 80%)"
+          summary: "⚠️ CPU usage is high"
+          description: "Gateway Service CPU: {{ $value | printf \"%.0f\" }}% (over 80% for 3 minutes)"
 
       - alert: CriticalCpuUsage
         expr: process_cpu_usage{job="gateway-service"} > 0.95
@@ -59,8 +59,8 @@ groups:
           severity: critical
           stage: system
         annotations:
-          summary: "🚨 CPU KRITIK darajada yuqori"
-          description: "Gateway Service CPU: {{ $value | printf \"%.0f\" }}% — Service hang bo'lishi mumkin."
+          summary: "🚨 CPU CRITICALLY high"
+          description: "Gateway Service CPU: {{ $value | printf \"%.0f\" }}% — Service may hang."
 
       - alert: HighHeapMemory
         expr: jvm_memory_used_bytes{job="gateway-service", area="heap"} / jvm_memory_max_bytes{job="gateway-service", area="heap"} > 0.8
@@ -69,8 +69,8 @@ groups:
           severity: warning
           stage: system
         annotations:
-          summary: "⚠️ JVM Heap memory yuqori"
-          description: "Heap ishlatilishi: {{ $value | printf \"%.0f\" }}% (max dan). OutOfMemory xavfi bor."
+          summary: "⚠️ JVM Heap memory is high"
+          description: "Heap usage: {{ $value | printf \"%.0f\" }}% (of max). Risk of OutOfMemory."
 
       - alert: CriticalHeapMemory
         expr: jvm_memory_used_bytes{job="gateway-service", area="heap"} / jvm_memory_max_bytes{job="gateway-service", area="heap"} > 0.95
@@ -79,8 +79,8 @@ groups:
           severity: critical
           stage: system
         annotations:
-          summary: "🚨 JVM Heap KRITIK — OutOfMemory yaqin"
-          description: "Heap: {{ $value | printf \"%.0f\" }}% to'lgan. Ilova crash bo'lishi mumkin."
+          summary: "🚨 JVM Heap CRITICAL — OutOfMemory imminent"
+          description: "Heap: {{ $value | printf \"%.0f\" }}% full. Application may crash."
 
       - alert: HighGcPause
         expr: rate(jvm_gc_pause_seconds_sum{job="gateway-service"}[5m]) > 0.5
@@ -89,8 +89,8 @@ groups:
           severity: warning
           stage: system
         annotations:
-          summary: "⚠️ GC pause vaqti yuqori"
-          description: "Garbage Collection juda ko'p vaqt olayapti: {{ $value | printf \"%.2f\" }}s/sec. Memory pressure bor."
+          summary: "⚠️ GC pause time is high"
+          description: "Garbage Collection is taking too much time: {{ $value | printf \"%.2f\" }}s/sec. Memory pressure exists."
 
       - alert: HighThreadCount
         expr: jvm_threads_live_threads{job="gateway-service"} > 200
@@ -99,11 +99,11 @@ groups:
           severity: warning
           stage: system
         annotations:
-          summary: "⚠️ Thread soni yuqori"
-          description: "Live threads: {{ $value | printf \"%.0f\" }}. Thread leak bo'lishi mumkin."
+          summary: "⚠️ Thread count is high"
+          description: "Live threads: {{ $value | printf \"%.0f\" }}. May be a thread leak."
 
   # ============================================================
-  # 3. E1: ORACLE PULL — Polling va auth hatoliklari
+  # 3. E1: ORACLE PULL — Polling and auth errors
   # ============================================================
   - name: oracle_pull_alerts
     rules:
@@ -115,8 +115,8 @@ groups:
           severity: critical
           stage: oracle_pull
         annotations:
-          summary: "🚨 Oracle Pull to'liq ishlamayapti"
-          description: "5 daqiqa davomida Oracle'dan birorta request pull qilinmadi. Auth xatolik, connection refused yoki Oracle down bo'lishi mumkin."
+          summary: "🚨 Oracle Pull completely not working"
+          description: "No requests have been pulled from Oracle for 5 minutes. May be auth error, connection refused or Oracle is down."
 
       - alert: OraclePullErrors
         expr: rate(gateway_oracle_pull_total{result="error"}[5m]) > 0.1
@@ -125,8 +125,8 @@ groups:
           severity: warning
           stage: oracle_pull
         annotations:
-          summary: "⚠️ Oracle Pull xatoliklari"
-          description: "Oracle pull error rate: {{ $value | printf \"%.2f\" }}/sec. Auth, connection yoki network xatolik bo'lishi mumkin."
+          summary: "⚠️ Oracle Pull errors"
+          description: "Oracle pull error rate: {{ $value | printf \"%.2f\" }}/sec. May be auth, connection or network error."
 
       - alert: OraclePullSlow
         expr: histogram_quantile(0.95, rate(gateway_oracle_pull_duration_seconds_bucket[5m])) > 5
@@ -135,11 +135,11 @@ groups:
           severity: warning
           stage: oracle_pull
         annotations:
-          summary: "⚠️ Oracle Pull sekin"
-          description: "Oracle pull p95 latency: {{ $value | printf \"%.2f\" }}s. Oracle yoki network sekin."
+          summary: "⚠️ Oracle Pull is slow"
+          description: "Oracle pull p95 latency: {{ $value | printf \"%.2f\" }}s. Oracle or network is slow."
 
   # ============================================================
-  # 4. E2: KAFKA PRODUCE — Requestni topicga yuborish
+  # 4. E2: KAFKA PRODUCE — Sending requests to topic
   # ============================================================
   - name: kafka_produce_alerts
     rules:
@@ -151,8 +151,8 @@ groups:
           severity: warning
           stage: kafka_produce
         annotations:
-          summary: "⚠️ Kafka produce xatoliklari"
-          description: "Requestlarni Kafka topicga yuborishda error rate: {{ $value | printf \"%.2f\" }}/sec. Kafka connection yoki serialization xatolik."
+          summary: "⚠️ Kafka produce errors"
+          description: "Error rate when sending requests to Kafka topic: {{ $value | printf \"%.2f\" }}/sec. Kafka connection or serialization error."
 
       - alert: KafkaProduceHighRetry
         expr: rate(gateway_kafka_produce_retry_total[5m]) > 0.5
@@ -161,8 +161,8 @@ groups:
           severity: warning
           stage: kafka_produce
         annotations:
-          summary: "⚠️ Kafka produce retry ko'p"
-          description: "Kafka produce retry rate: {{ $value | printf \"%.2f\" }}/sec. Kafka broker nobarqaror."
+          summary: "⚠️ Kafka produce retry high"
+          description: "Kafka produce retry rate: {{ $value | printf \"%.2f\" }}/sec. Kafka broker is unstable."
 
       - alert: KafkaProduceSlow
         expr: histogram_quantile(0.95, rate(gateway_kafka_produce_duration_seconds_bucket[5m])) > 3
@@ -171,11 +171,11 @@ groups:
           severity: warning
           stage: kafka_produce
         annotations:
-          summary: "⚠️ Kafka produce sekin"
-          description: "Kafka produce p95: {{ $value | printf \"%.2f\" }}s. Broker yuki yuqori bo'lishi mumkin."
+          summary: "⚠️ Kafka produce is slow"
+          description: "Kafka produce p95: {{ $value | printf \"%.2f\" }}s. Broker load may be high."
 
   # ============================================================
-  # 5. E3: CONSUMER — Request consume va Redis state
+  # 5. E3: CONSUMER — Request consume and Redis state
   # ============================================================
   - name: consumer_alerts
     rules:
@@ -187,8 +187,8 @@ groups:
           severity: critical
           stage: consumer_process
         annotations:
-          summary: "🚨 Consumer message qabul qilmayapti"
-          description: "Lag bor ({{ $value | printf \"%.0f\" }}) lekin consumer hech narsa consume qilmayapti. Consumer hang yoki crash bo'lgan."
+          summary: "🚨 Consumer not receiving messages"
+          description: "Lag exists ({{ $value | printf \"%.0f\" }}) but consumer is not consuming anything. Consumer has hung or crashed."
 
       - alert: ConsumerHighDuplicateSkip
         expr: rate(gateway_consumer_skipped_total{reason="duplicate"}[5m]) > 1
@@ -197,8 +197,8 @@ groups:
           severity: warning
           stage: consumer_process
         annotations:
-          summary: "⚠️ Duplicate skip ko'p"
-          description: "Duplicate skip rate: {{ $value | printf \"%.2f\" }}/sec. Redis state yoki Kafka rebalance muammo."
+          summary: "⚠️ Duplicate skip is high"
+          description: "Duplicate skip rate: {{ $value | printf \"%.2f\" }}/sec. Redis state or Kafka rebalance issue."
 
       - alert: ConsumerHighLockFail
         expr: rate(gateway_consumer_skipped_total{reason="lock_failed"}[5m]) > 0.5
@@ -207,8 +207,8 @@ groups:
           severity: warning
           stage: consumer_process
         annotations:
-          summary: "⚠️ Redis lock xatoliklari ko'p"
-          description: "Lock fail rate: {{ $value | printf \"%.2f\" }}/sec. Redis connection yoki lock contention muammo."
+          summary: "⚠️ Redis lock errors are high"
+          description: "Lock fail rate: {{ $value | printf \"%.2f\" }}/sec. Redis connection or lock contention issue."
 
       - alert: KafkaConsumerHighLag
         expr: gateway_kafka_consumer_lag > 500
@@ -217,8 +217,8 @@ groups:
           severity: warning
           stage: consumer_process
         annotations:
-          summary: "⚠️ Kafka consumer lag yuqori"
-          description: "{{ $labels.listener }} lag: {{ $value | printf \"%.0f\" }} messages. Consumer yetishmayapti."
+          summary: "⚠️ Kafka consumer lag is high"
+          description: "{{ $labels.listener }} lag: {{ $value | printf \"%.0f\" }} messages. Consumer is falling behind."
 
       - alert: KafkaConsumerCriticalLag
         expr: gateway_kafka_consumer_lag > 2000
@@ -227,11 +227,11 @@ groups:
           severity: critical
           stage: consumer_process
         annotations:
-          summary: "🚨 Kafka consumer lag KRITIK"
-          description: "{{ $labels.listener }} lag: {{ $value | printf \"%.0f\" }}. Scale up yoki muammo hal qilish kerak."
+          summary: "🚨 Kafka consumer lag CRITICAL"
+          description: "{{ $labels.listener }} lag: {{ $value | printf \"%.0f\" }}. Need to scale up or resolve issue."
 
   # ============================================================
-  # 6. E4: HTTP REQUEST — Barcha HTTP xatoliklari
+  # 6. E4: HTTP REQUEST — All HTTP errors
   # ============================================================
   - name: http_request_alerts
     rules:
@@ -248,8 +248,8 @@ groups:
           severity: warning
           stage: http_request
         annotations:
-          summary: "⚠️ HTTP error rate 30% dan oshdi"
-          description: "External API ga so'rovlarning 30%+ xato qaytayapti."
+          summary: "⚠️ HTTP error rate exceeded 30%"
+          description: "Over 30% of requests to external API are returning errors."
 
       - alert: Http4xxClientErrors
         expr: rate(gateway_http_request_total{result="error_4xx"}[5m]) > 0.2
@@ -258,8 +258,8 @@ groups:
           severity: warning
           stage: http_request
         annotations:
-          summary: "⚠️ HTTP 4xx client xatoliklari"
-          description: "4xx error rate: {{ $value | printf \"%.2f\" }}/sec. Auth (401/403), not found (404), yoki bad request (400)."
+          summary: "⚠️ HTTP 4xx client errors"
+          description: "4xx error rate: {{ $value | printf \"%.2f\" }}/sec. Auth (401/403), not found (404), or bad request (400)."
 
       - alert: Http5xxServerErrors
         expr: rate(gateway_http_request_total{result="error_5xx"}[5m]) > 0.2
@@ -268,8 +268,8 @@ groups:
           severity: critical
           stage: http_request
         annotations:
-          summary: "🚨 HTTP 5xx server xatoliklari"
-          description: "5xx error rate: {{ $value | printf \"%.2f\" }}/sec. External API server xatolik qaytaryapti (500/502/503)."
+          summary: "🚨 HTTP 5xx server errors"
+          description: "5xx error rate: {{ $value | printf \"%.2f\" }}/sec. External API server is returning errors (500/502/503)."
 
       - alert: HttpTimeoutSpike
         expr: rate(gateway_http_request_total{result="timeout"}[5m]) > 0.1
@@ -278,8 +278,8 @@ groups:
           severity: warning
           stage: http_request
         annotations:
-          summary: "⚠️ HTTP timeout ko'paydi"
-          description: "Timeout rate: {{ $value | printf \"%.2f\" }}/sec. External API javob bermayapti yoki network sekin."
+          summary: "⚠️ HTTP timeout spike"
+          description: "Timeout rate: {{ $value | printf \"%.2f\" }}/sec. External API not responding or network is slow."
 
       - alert: HttpSlowResponse
         expr: histogram_quantile(0.95, rate(gateway_http_request_duration_seconds_bucket[5m])) > 10
@@ -288,8 +288,8 @@ groups:
           severity: warning
           stage: http_request
         annotations:
-          summary: "⚠️ HTTP response sekin"
-          description: "HTTP p95 latency: {{ $value | printf \"%.2f\" }}s. External API sekin javob beryapti."
+          summary: "⚠️ HTTP response is slow"
+          description: "HTTP p95 latency: {{ $value | printf \"%.2f\" }}s. External API is responding slowly."
 
       - alert: HttpRetryHigh
         expr: rate(gateway_http_request_retry_total[5m]) > 0.5
@@ -298,8 +298,8 @@ groups:
           severity: warning
           stage: http_request
         annotations:
-          summary: "⚠️ HTTP retry ko'p"
-          description: "HTTP retry rate: {{ $value | printf \"%.2f\" }}/sec. External API nobarqaror."
+          summary: "⚠️ HTTP retry is high"
+          description: "HTTP retry rate: {{ $value | printf \"%.2f\" }}/sec. External API is unstable."
 
       - alert: CircuitBreakerOpen
         expr: increase(gateway_http_circuitbreaker_rejected_total[5m]) > 0
@@ -308,11 +308,11 @@ groups:
           severity: critical
           stage: http_request
         annotations:
-          summary: "🚨 Circuit Breaker OCHILDI"
-          description: "External API ga so'rovlar Circuit Breaker tomonidan rad qilinyapti. API ishlamayotgan bo'lishi mumkin."
+          summary: "🚨 Circuit Breaker OPENED"
+          description: "Requests to external API are being rejected by Circuit Breaker. API may not be working."
 
   # ============================================================
-  # 7. E5: ORACLE SAVE — Response saqlash
+  # 7. E5: ORACLE SAVE — Response saving
   # ============================================================
   - name: oracle_save_alerts
     rules:
@@ -324,8 +324,8 @@ groups:
           severity: critical
           stage: oracle_save
         annotations:
-          summary: "🚨 Oracle save xatoliklari"
-          description: "Response'larni Oracle'ga saqlashda error rate: {{ $value | printf \"%.2f\" }}/sec. Oracle connection, auth yoki data xatolik."
+          summary: "🚨 Oracle save errors"
+          description: "Error rate when saving responses to Oracle: {{ $value | printf \"%.2f\" }}/sec. Oracle connection, auth or data error."
 
       - alert: OracleSaveRetryHigh
         expr: rate(gateway_oracle_save_retry_total[5m]) > 0.3
@@ -334,8 +334,8 @@ groups:
           severity: warning
           stage: oracle_save
         annotations:
-          summary: "⚠️ Oracle save retry ko'p"
-          description: "Oracle save retry rate: {{ $value | printf \"%.2f\" }}/sec. Oracle connection nobarqaror."
+          summary: "⚠️ Oracle save retry high"
+          description: "Oracle save retry rate: {{ $value | printf \"%.2f\" }}/sec. Oracle connection is unstable."
 
       - alert: OracleSaveSlow
         expr: histogram_quantile(0.95, rate(gateway_oracle_save_duration_seconds_bucket[5m])) > 5
@@ -344,8 +344,8 @@ groups:
           severity: warning
           stage: oracle_save
         annotations:
-          summary: "⚠️ Oracle save sekin"
-          description: "Oracle save p95: {{ $value | printf \"%.2f\" }}s. Oracle server yoki network sekin."
+          summary: "⚠️ Oracle save is slow"
+          description: "Oracle save p95: {{ $value | printf \"%.2f\" }}s. Oracle server or network is slow."
 
   # ============================================================
   # 8. DLQ — Dead Letter Queue
@@ -360,8 +360,8 @@ groups:
           severity: warning
           stage: dlq
         annotations:
-          summary: "⚠️ DLQ ga message tushdi"
-          description: "Oxirgi 5 daqiqada {{ $value | printf \"%.0f\" }} ta message DLQ ga tushdi. Barcha retrylar muvaffaqiyatsiz."
+          summary: "⚠️ Messages sent to DLQ"
+          description: "{{ $value | printf \"%.0f\" }} messages sent to DLQ in the last 5 minutes. All retries failed."
 
       - alert: DlqSpike
         expr: increase(gateway_dlq_sent_total[5m]) > 10
@@ -370,8 +370,8 @@ groups:
           severity: critical
           stage: dlq
         annotations:
-          summary: "🚨 DLQ SPIKE — massiv failure"
-          description: "5 daqiqada {{ $value | printf \"%.0f\" }} ta message DLQ ga tushdi. Tizimda jiddiy muammo."
+          summary: "🚨 DLQ SPIKE — massive failure"
+          description: "{{ $value | printf \"%.0f\" }} messages sent to DLQ in 5 minutes. Serious system issue."
 
   # ============================================================
   # 9. CONCURRENCY & THREAD POOL
@@ -386,8 +386,8 @@ groups:
           severity: warning
           stage: concurrency
         annotations:
-          summary: "⚠️ HTTP thread pool queue to'lmoqda"
-          description: "Queue size: {{ $value | printf \"%.0f\" }}. Thread pool yetishmayapti, requestlar kutmoqda."
+          summary: "⚠️ HTTP thread pool queue filling up"
+          description: "Queue size: {{ $value | printf \"%.0f\" }}. Thread pool insufficient, requests are waiting."
 
       - alert: HttpPoolFullyActive
         expr: gateway_http_pool_active / gateway_http_pool_size > 0.9
@@ -396,8 +396,8 @@ groups:
           severity: warning
           stage: concurrency
         annotations:
-          summary: "⚠️ HTTP thread pool 90%+ band"
-          description: "Active: {{ $value | printf \"%.0f\" }}% band. Thread pool max ga yaqin."
+          summary: "⚠️ HTTP thread pool 90%+ busy"
+          description: "Active: {{ $value | printf \"%.0f\" }}% busy. Thread pool near maximum."
 
       - alert: HighRetryRate
         expr: >
@@ -411,8 +411,8 @@ groups:
           severity: warning
           stage: all
         annotations:
-          summary: "⚠️ Umumiy retry rate yuqori"
-          description: "Umumiy retry: {{ $value | printf \"%.2f\" }}/sec. Tizimda nobarqarorlik bor."
+          summary: "⚠️ Overall retry rate is high"
+          description: "Total retry: {{ $value | printf \"%.2f\" }}/sec. System instability exists."
 
   # ============================================================
   # 10. REDIS HEALTH — Memory, connections, performance
@@ -427,8 +427,8 @@ groups:
           severity: warning
           stage: redis
         annotations:
-          summary: "⚠️ Redis memory 80% dan oshdi"
-          description: "Redis memory: {{ $value | printf \"%.0f\" }}% ishlatilgan. Eviction boshlanishi mumkin."
+          summary: "⚠️ Redis memory exceeded 80%"
+          description: "Redis memory: {{ $value | printf \"%.0f\" }}% used. Eviction may start."
 
       - alert: RedisCriticalMemory
         expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.95
@@ -437,8 +437,8 @@ groups:
           severity: critical
           stage: redis
         annotations:
-          summary: "🚨 Redis memory KRITIK"
-          description: "Redis memory 95%+ to'lgan. Key eviction va data loss xavfi."
+          summary: "🚨 Redis memory CRITICAL"
+          description: "Redis memory 95%+ full. Risk of key eviction and data loss."
 
       - alert: RedisHighEviction
         expr: rate(redis_evicted_keys_total[5m]) > 10
@@ -447,8 +447,8 @@ groups:
           severity: warning
           stage: redis
         annotations:
-          summary: "⚠️ Redis key eviction ko'p"
-          description: "Eviction rate: {{ $value | printf \"%.1f\" }} keys/sec. Memory yetishmayapti, state yo'qolishi mumkin."
+          summary: "⚠️ Redis key eviction is high"
+          description: "Eviction rate: {{ $value | printf \"%.1f\" }} keys/sec. Memory insufficient, state may be lost."
 
       - alert: RedisConnectionRejected
         expr: rate(redis_rejected_connections_total[5m]) > 0
@@ -457,8 +457,8 @@ groups:
           severity: warning
           stage: redis
         annotations:
-          summary: "⚠️ Redis connection rad qilyapti"
-          description: "Redis yangi connectionlarni rad qilayapti. Max connection limitga yetgan."
+          summary: "⚠️ Redis rejecting connections"
+          description: "Redis is rejecting new connections. Max connection limit reached."
 
       - alert: RedisLowHitRate
         expr: redis_keyspace_hits_total / (redis_keyspace_hits_total + redis_keyspace_misses_total + 0.001) < 0.5
@@ -467,8 +467,8 @@ groups:
           severity: warning
           stage: redis
         annotations:
-          summary: "⚠️ Redis cache hit rate past"
-          description: "Hit rate: {{ $value | printf \"%.0f\" }}%. OAuth2 token yoki state cache samarasiz ishlayapti."
+          summary: "⚠️ Redis cache hit rate is low"
+          description: "Hit rate: {{ $value | printf \"%.0f\" }}%. OAuth2 token or state cache working inefficiently."
 
   # ============================================================
   # 11. REDPANDA/KAFKA HEALTH
@@ -483,8 +483,8 @@ groups:
           severity: warning
           stage: kafka
         annotations:
-          summary: "⚠️ Kafka request xatoliklari"
-          description: "Kafka error rate: {{ $value | printf \"%.2f\" }}/sec. Produce yoki consume da muammo."
+          summary: "⚠️ Kafka request errors"
+          description: "Kafka error rate: {{ $value | printf \"%.2f\" }}/sec. Issue in produce or consume."
 
       - alert: KafkaProduceLatencyHigh
         expr: histogram_quantile(0.95, rate(redpanda_kafka_request_produce_latency_seconds_bucket[5m])) > 1
@@ -493,8 +493,8 @@ groups:
           severity: warning
           stage: kafka
         annotations:
-          summary: "⚠️ Kafka produce latency yuqori"
-          description: "Produce p95: {{ $value | printf \"%.2f\" }}s. Broker yuki yuqori."
+          summary: "⚠️ Kafka produce latency is high"
+          description: "Produce p95: {{ $value | printf \"%.2f\" }}s. Broker load is high."
 
       - alert: KafkaStorageGrowing
         expr: predict_linear(sum by (redpanda_topic) (redpanda_kafka_partition_log_size_bytes{redpanda_topic=~"bmb.request.*"})[1h:5m], 86400) > 5368709120
@@ -503,5 +503,5 @@ groups:
           severity: warning
           stage: kafka
         annotations:
-          summary: "⚠️ Kafka storage tez o'smoqda"
-          description: "Hozirgi tezlikda 24 soatda 5GB dan oshadi. Retention policy tekshiring."
+          summary: "⚠️ Kafka storage growing rapidly"
+          description: "At current rate will exceed 5GB in 24 hours. Check retention policy."
