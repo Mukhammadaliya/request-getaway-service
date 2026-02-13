@@ -1,0 +1,78 @@
+# ============================================================
+# PRODUCTION PROFILE — Environment Variables
+# ============================================================
+# Activate: --spring.profiles.active=prod
+# Requires OS environment variables to be set
+# ============================================================
+
+gateway:
+
+  # --- Kafka (from env vars) ---
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+    group-id: ${KAFKA_GROUP_ID}
+    topics:
+      request-new: ${KAFKA_TOPIC_REQUEST}
+      request-response: ${KAFKA_TOPIC_RESPONSE}
+      request-dlq: ${KAFKA_TOPIC_DLQ}
+
+  # --- Data Source (from env vars) ---
+  source:
+    base-url: ${SOURCE_BASE_URL}
+    username: ${SOURCE_USERNAME}
+    password: ${SOURCE_PASSWORD}
+    request-pull-uri: ${SOURCE_PULL_URI}
+    response-save-uri: ${SOURCE_SAVE_URI}
+    connection-timeout: ${SOURCE_TIMEOUT:60}
+
+  # --- Polling ---
+  polling:
+    enabled: ${POLLING_ENABLED:true}
+    interval-ms: ${POLLING_INTERVAL_MS:5000}
+    batch-size: ${POLLING_BATCH_SIZE:100}
+
+  # --- HTTP Client ---
+  http:
+    connect-timeout-ms: ${HTTP_CONNECT_TIMEOUT:10000}
+    read-timeout-ms: ${HTTP_READ_TIMEOUT:30000}
+    write-timeout-ms: ${HTTP_WRITE_TIMEOUT:30000}
+
+  # --- Retry ---
+  retry:
+    max-attempts: ${RETRY_MAX_ATTEMPTS:3}
+    interval-ms: ${RETRY_INTERVAL_MS:3000}
+    retryable-statuses: ${RETRY_STATUSES:408,429,500,502,503,504}
+
+  # --- Dynamic Concurrency ---
+  concurrency:
+    min-concurrency: ${CONCURRENCY_MIN:10}
+    max-concurrency: ${CONCURRENCY_MAX:15}
+    monitor-interval-ms: ${CONCURRENCY_MONITOR_INTERVAL:10000}
+    scale-up-threshold: ${CONCURRENCY_SCALE_UP:50}
+    scale-down-threshold: ${CONCURRENCY_SCALE_DOWN:10}
+    scale-step: ${CONCURRENCY_SCALE_STEP:2}
+    scale-cooldown-ms: ${CONCURRENCY_COOLDOWN:30000}
+    topic-partitions: ${KAFKA_PARTITIONS:10}
+
+  # --- OAuth2 (from env vars - JSON format) ---
+  oauth2:
+    providers:
+      smartup:
+        type: ${OAUTH2_SMARTUP_TYPE:biruni}
+        token-url: ${OAUTH2_SMARTUP_TOKEN_URL}
+        client-id: ${OAUTH2_SMARTUP_CLIENT_ID}
+        client-secret: ${OAUTH2_SMARTUP_CLIENT_SECRET}
+        scope: ${OAUTH2_SMARTUP_SCOPE:read+write}
+
+  # --- Telegram ---
+  telegram:
+    enabled: ${TELEGRAM_ENABLED:false}
+    bot-token: ${TELEGRAM_BOT_TOKEN:}
+    chat-id: ${TELEGRAM_CHAT_ID:0}
+    message-thread-id: ${TELEGRAM_MESSAGE_THREAD_ID:}
+
+# Production logging
+logging:
+  level:
+    uz.greenwhite.gateway: INFO
+    org.springframework.kafka: WARN

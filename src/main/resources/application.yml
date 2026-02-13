@@ -1,9 +1,9 @@
 # ============================================================
-# REQUEST GATEWAY SERVICE — Application Configuration
+# REQUEST GATEWAY SERVICE — Base Configuration
 # ============================================================
-# This service is a universal request gateway that pulls
-# requests from a data source, sends them to external APIs
-# via Kafka-driven pipeline, and saves responses back.
+# Default profile: dev
+# Available profiles: dev, prod
+# Run with: java -jar gateway.jar --spring.profiles.active=prod
 # ============================================================
 
 spring:
@@ -12,10 +12,9 @@ spring:
   application:
     name: request-gateway-service
   profiles:
-    active: ${SPRING_PROFILE:dev}
+    active: ${SPRING_PROFILE:dev}  # Default to dev if not specified
 
-  # Kafka — Spring auto-config (serializer/deserializer)
-  # bootstrap-servers and group-id are loaded from gateway.kafka section
+  # Kafka — Spring auto-config
   kafka:
     bootstrap-servers: ${gateway.kafka.bootstrap-servers}
     consumer:
@@ -29,13 +28,13 @@ spring:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
 
-  # Redis — distributed cache and state management
+  # Redis
   data:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
 
-  # JDBC auto-config disabled (data source uses HTTP API, not direct DB)
+  # JDBC auto-config disabled
   autoconfigure:
     exclude:
       - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
@@ -62,100 +61,82 @@ management:
       show-details: always
 
 # ============================================================
-# GATEWAY CONFIGURATION — All custom settings
+# GATEWAY BASE CONFIGURATION
+# Profile-specific overrides in application-{profile}.yml
 # ============================================================
 gateway:
 
-  # --- Kafka ---
+  # --- Kafka (defaults - can be overridden by profiles) ---
   kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:19092}
-    group-id: ${KAFKA_GROUP_ID:gateway-service-group}
+    bootstrap-servers: localhost:19092
+    group-id: gateway-service-group
     topics:
-      request-new: ${KAFKA_TOPIC_REQUEST:gateway.request.new}
-      request-response: ${KAFKA_TOPIC_RESPONSE:gateway.request.response}
-      request-dlq: ${KAFKA_TOPIC_DLQ:gateway.request.dlq}
+      request-new: gateway.request.new
+      request-response: gateway.request.response
+      request-dlq: gateway.request.dlq
 
-  # --- Data Source connection (pull requests / save responses) ---
+  # --- Data Source (defaults) ---
   source:
-    base-url: ${SOURCE_BASE_URL:http://localhost:8080/smartup24}
-    username: ${SOURCE_USERNAME:admin@head}
-    password: ${SOURCE_PASSWORD:greenwhite}
-    request-pull-uri: ${SOURCE_PULL_URI:/b/biruni/bmb/requests$pull}
-    response-save-uri: ${SOURCE_SAVE_URI:/b/biruni/bmb/requests$save}
-    connection-timeout: ${SOURCE_TIMEOUT:60}
+    base-url: http://localhost:8080
+    username: admin
+    password: changeme
+    request-pull-uri: /api/requests/pull
+    response-save-uri: /api/requests/save
+    connection-timeout: 60
 
-  # --- Polling (scheduled pull from data source) ---
+  # --- Polling ---
   polling:
-    enabled: ${POLLING_ENABLED:true}
-    interval-ms: ${POLLING_INTERVAL_MS:5000}
-    batch-size: ${POLLING_BATCH_SIZE:100}
+    enabled: true
+    interval-ms: 5000
+    batch-size: 100
 
-  # --- HTTP Client (outbound requests to external APIs) ---
+  # --- HTTP Client ---
   http:
-    connect-timeout-ms: ${HTTP_CONNECT_TIMEOUT:10000}
-    read-timeout-ms: ${HTTP_READ_TIMEOUT:30000}
-    write-timeout-ms: ${HTTP_WRITE_TIMEOUT:30000}
+    connect-timeout-ms: 10000
+    read-timeout-ms: 30000
+    write-timeout-ms: 30000
 
   # --- Retry ---
   retry:
-    max-attempts: ${RETRY_MAX_ATTEMPTS:3}
-    interval-ms: ${RETRY_INTERVAL_MS:3000}
-    retryable-statuses: ${RETRY_STATUSES:408,429,500,502,503,504}
+    max-attempts: 3
+    interval-ms: 3000
+    retryable-statuses: 408,429,500,502,503,504
 
-  # --- Dynamic Concurrency (auto-scaling consumer threads) ---
+  # --- Dynamic Concurrency ---
   concurrency:
-    min-concurrency: ${CONCURRENCY_MIN:10}
-    max-concurrency: ${CONCURRENCY_MAX:15}
-    monitor-interval-ms: ${CONCURRENCY_MONITOR_INTERVAL:10000}
-    scale-up-threshold: ${CONCURRENCY_SCALE_UP:50}
-    scale-down-threshold: ${CONCURRENCY_SCALE_DOWN:10}
-    scale-step: ${CONCURRENCY_SCALE_STEP:2}
-    scale-cooldown-ms: ${CONCURRENCY_COOLDOWN:30000}
-    topic-partitions: ${KAFKA_PARTITIONS:10}
+    min-concurrency: 10
+    max-concurrency: 15
+    monitor-interval-ms: 10000
+    scale-up-threshold: 50
+    scale-down-threshold: 10
+    scale-step: 2
+    scale-cooldown-ms: 30000
+    topic-partitions: 10
 
-  # --- OAuth2 Providers ---
-  # Configure one or more OAuth2 providers for external API authentication.
-  # Each provider has its own token-url, client credentials, and scope.
-  # The 'type' field determines the token acquisition strategy.
+  # --- OAuth2 Providers (empty by default) ---
   oauth2:
-    providers:
-      smartup:
-        type: ${OAUTH2_SMARTUP_TYPE:biruni}
-        token-url: ${OAUTH2_SMARTUP_TOKEN_URL:http://localhost:8080/b6/security/oauth/token}
-        client-id: ${OAUTH2_SMARTUP_CLIENT_ID:12344432421}
-        client-secret: ${OAUTH2_SMARTUP_CLIENT_SECRET:ASLKDGHAJGF1341ASGHFAGFHj}
-        scope: ${OAUTH2_SMARTUP_SCOPE:read+write}
+    providers: {}
 
-  # --- Telegram Notification ---
+  # --- Telegram Notifications (disabled by default) ---
   telegram:
-    enabled: ${TELEGRAM_ENABLED:false}
-    bot-token: ${TELEGRAM_BOT_TOKEN:}
-    chat-id: ${TELEGRAM_CHAT_ID:}
-    message-thread-id: ${TELEGRAM_THREAD_ID:}
-
-# ============================================================
-# LOGGING
-# ============================================================
-logging:
-  level:
-    root: INFO
-    uz.greenwhite.gateway: ${LOG_LEVEL:DEBUG}
-    org.apache.kafka: WARN
+    enabled: false
+    bot-token: ""
+    chat-id: 0
+    message-thread-id: null
+    connect-timeout-ms: 5000
+    read-timeout-ms: 5000
 
 # ============================================================
 # CIRCUIT BREAKER (Resilience4j)
 # ============================================================
 resilience4j:
   circuitbreaker:
-    instances:
-      externalApi:
-        register-health-indicator: true
-        sliding-window-type: COUNT_BASED
-        sliding-window-size: ${CB_WINDOW_SIZE:10}
-        minimum-number-of-calls: ${CB_MIN_CALLS:5}
-        failure-rate-threshold: ${CB_FAILURE_THRESHOLD:50}
-        wait-duration-in-open-state: ${CB_WAIT_DURATION:30s}
-        permitted-number-of-calls-in-half-open-state: ${CB_HALF_OPEN_CALLS:3}
-        slow-call-duration-threshold: ${CB_SLOW_CALL_THRESHOLD:10s}
-        slow-call-rate-threshold: ${CB_SLOW_CALL_RATE:80}
+    configs:
+      default:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        slow-call-duration-threshold: 10s
+        slow-call-rate-threshold: 50
         automatic-transition-from-open-to-half-open-enabled: true

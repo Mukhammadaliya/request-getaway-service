@@ -1,0 +1,59 @@
+# ============================================================
+# DEVELOPMENT PROFILE — Biruni Integration
+# ============================================================
+# Activate: --spring.profiles.active=dev
+# OR: export SPRING_PROFILE=dev
+# ============================================================
+
+gateway:
+
+  # --- Kafka (Local RedPanda) ---
+  kafka:
+    bootstrap-servers: localhost:19092
+    group-id: gateway-service-group
+    topics:
+      request-new: bmb.request.new
+      request-response: bmb.request.response
+      request-dlq: bmb.request.dlq
+
+  # --- Data Source (Biruni/Smartup) ---
+  source:
+    base-url: http://localhost:8080/smartup24
+    username: admin@head
+    password: greenwhite
+    request-pull-uri: /b/biruni/bmb/requests$pull
+    response-save-uri: /b/biruni/bmb/requests$save
+    connection-timeout: 60
+
+  # --- OAuth2 Providers (Smartup) ---
+  oauth2:
+    providers:
+      smartup:
+        type: biruni
+        token-url: http://localhost:8080/b6/security/oauth/token
+        client-id: your-client-id
+        client-secret: your-client-secret
+        scope: read+write
+
+  # --- Telegram (disabled in dev) ---
+  telegram:
+    enabled: false
+
+# Development-specific logging
+logging:
+  level:
+    root: INFO
+    uz.greenwhite.gateway: DEBUG
+
+    # Hide Kafka verbosity
+    org.apache.kafka.clients.producer.ProducerConfig: WARN
+    org.apache.kafka.clients.consumer.ConsumerConfig: WARN
+    org.apache.kafka.clients.admin.AdminClientConfig: WARN
+    org.apache.kafka: WARN
+
+    # Keep important Kafka logs
+    org.springframework.kafka.listener: INFO
+    org.apache.kafka.clients.Metadata: INFO
+
+  pattern:
+    console: "%d{HH:mm:ss.SSS} %clr(%-5level) %clr([%15.15thread]){cyan} %clr(%-40.40logger{39}){blue} : %msg%n"
