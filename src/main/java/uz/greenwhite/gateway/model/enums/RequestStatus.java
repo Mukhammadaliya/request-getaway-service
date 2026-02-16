@@ -11,7 +11,6 @@ public enum RequestStatus {
     PROCESSING("P", "Processing - Pulled from Oracle"),
     SENT("S", "Sent - HTTP request sent"),
     COMPLETED("C", "Completed - Response received"),
-    DONE("D", "Done - Callback executed successfully"),
     FAILED("F", "Failed - Error occurred");
 
     private final String code;

@@ -8,7 +8,6 @@ import lombok.RequiredArgsConstructor;
 public enum ErrorSource {
 
     HTTP("HTTP", "External API error"),
-    CALLBACK("CALLBACK", "PL/SQL callback error"),
     SYSTEM("SYSTEM", "Internal system error");
 
     private final String code;
