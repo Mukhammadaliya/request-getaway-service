@@ -16,7 +16,7 @@ import uz.greenwhite.gateway.model.kafka.RequestMessage;
 import uz.greenwhite.gateway.model.kafka.ResponseMessage;
 import uz.greenwhite.gateway.oauth2.OAuth2ProviderService;
 import uz.greenwhite.gateway.oauth2.model.Token;
-
+import uz.greenwhite.gateway.config.HttpProperties;
 import java.net.URI;
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -30,6 +30,7 @@ public class HttpRequestService {
     private final WebClient webClient;
     private final CircuitBreakerRegistry circuitBreakerRegistry;
     private final OAuth2ProviderService oAuth2ProviderService;
+    private final HttpProperties httpProperties;
 
     /**
      * Get or create circuit breaker for specific base URL.
@@ -74,18 +75,35 @@ public class HttpRequestService {
         }
     }
 
+    
     /**
      * Send HTTP request with per-endpoint Circuit Breaker protection and OAuth2 support.
      * Each base URL gets its own circuit breaker instance.
+     *
+     * Order of operations:
+     *   1. Resolve OAuth2 token (before CB — token failure is NOT an external API issue)
+     *   2. Acquire CB permission (only if we're actually going to make HTTP call)
+     *   3. Send HTTP request
+     *   4. Record CB result (onSuccess / onError)
      */
     public Mono<ResponseMessage> sendRequest(RequestMessage request) {
         String compositeId = request.getCompositeId();
 
-        // Get circuit breaker for THIS specific base URL
+        // 1. Resolve OAuth2 token BEFORE Circuit Breaker
+        //    Token failure is an internal issue, not external API failure — CB should not track it
+        Map<String, String> headers;
+        try {
+            headers = addAuthorizationHeader(request);
+        } catch (OAuth2TokenException e) {
+            log.error("OAuth2 token failed, skipping HTTP call: {}", compositeId);
+            return Mono.just(buildOAuth2ErrorResponse(request, e.getMessage()));
+        }
+
+        // 2. Get circuit breaker for THIS specific base URL
         CircuitBreaker circuitBreaker = getCircuitBreaker(request.getBaseUrl());
         String cbName = circuitBreaker.getName();
 
-        // 1. Check if Circuit Breaker is OPEN
+        // 3. Check if Circuit Breaker is OPEN
         try {
             circuitBreaker.acquirePermission();
         } catch (CallNotPermittedException ex) {
@@ -93,21 +111,14 @@ public class HttpRequestService {
             return Mono.just(buildCircuitBreakerResponse(request, cbName));
         }
 
-        // 2. Add OAuth2 Authorization header
-        Map<String, String> headers;
-        try {
-            headers = addAuthorizationHeader(request);
-        } catch (OAuth2TokenException e) {
-            log.error("OAuth2 token failed, skipping HTTP call: {}", compositeId);
-            circuitBreaker.onSuccess(0, java.util.concurrent.TimeUnit.NANOSECONDS);
-            return Mono.just(buildOAuth2ErrorResponse(request, e.getMessage()));
-        }
-
+        // 4. Send HTTP request — CB tracks only real HTTP outcomes
         long startTime = System.nanoTime();
         String fullUrl = buildFullUrl(request);
         HttpMethod method = HttpMethod.valueOf(request.getMethod().toUpperCase());
 
         log.info("Sending HTTP request [CB: {}]: {} {} -> {}", cbName, method, fullUrl, compositeId);
+
+        int timeoutMs = httpProperties.getTimeoutForUrl(request.getBaseUrl());
 
         return webClient
                 .method(method)
@@ -116,6 +127,7 @@ public class HttpRequestService {
                 .bodyValue(request.getBody() != null ? request.getBody() : "")
                 .retrieve()
                 .toEntity(String.class)
+                .timeout(java.time.Duration.ofMillis(timeoutMs))
                 .map(entity -> {
                     long duration = System.nanoTime() - startTime;
                     int status = entity.getStatusCode().value();

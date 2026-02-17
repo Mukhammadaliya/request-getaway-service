@@ -25,7 +25,6 @@ import java.util.concurrent.TimeUnit;
 @ConditionalOnProperty(name = "gateway.polling.enabled", havingValue = "true")
 public class RequestPuller {
 
-    private final BiruniClient biruniClient;
     private final RequestProducer requestProducer;
     private final RetryProperties retryProperties;
     private final GatewayMetrics metrics;

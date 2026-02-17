@@ -6,6 +6,7 @@ import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -13,8 +14,12 @@ import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.config.TopicBuilder;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
+import org.springframework.kafka.listener.CommonErrorHandler;
 import org.springframework.kafka.listener.ContainerProperties;
+import org.springframework.kafka.listener.DefaultErrorHandler;
+import org.springframework.kafka.support.serializer.ErrorHandlingDeserializer;
 import org.springframework.kafka.support.serializer.JsonDeserializer;
+import org.springframework.util.backoff.FixedBackOff;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -62,6 +67,39 @@ public class KafkaConfig {
                 .build();
     }
 
+    // ==================== ERROR HANDLER ====================
+
+    /**
+     * Common error handler for all Kafka consumers.
+     * - Deserialization errors: logged and skipped (no retry — broken message won't fix itself)
+     * - Other errors: retried 2 times with 1 second interval, then skipped
+     */
+    @Bean
+    public CommonErrorHandler kafkaErrorHandler() {
+        // FixedBackOff(intervalMs, maxAttempts): retry 2 times with 1s gap, then give up
+        DefaultErrorHandler errorHandler = new DefaultErrorHandler(
+                (record, exception) -> {
+                    // This is called when all retries are exhausted
+                    log.error("Kafka message processing failed permanently — skipping. " +
+                                    "topic={}, partition={}, offset={}, key={}, error={}",
+                            record.topic(), record.partition(), record.offset(),
+                            record.key(), exception.getMessage(), exception);
+                },
+                new FixedBackOff(1000L, 2L)
+        );
+
+        // Deserialization errors should NOT be retried — broken JSON won't fix itself
+        errorHandler.addNotRetryableExceptions(
+                org.apache.kafka.common.errors.SerializationException.class,
+                org.springframework.kafka.support.serializer.DeserializationException.class
+        );
+
+        log.info("Kafka error handler configured: retry=2 attempts, interval=1s, " +
+                "deserialization errors=no retry (skip immediately)");
+
+        return errorHandler;
+    }
+
     // ==================== CONSUMER FACTORY ====================
 
     @Bean
@@ -71,8 +109,17 @@ public class KafkaConfig {
         props.put(ConsumerConfig.GROUP_ID_CONFIG, kafkaProperties.getGroupId());
         props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
         props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
-        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
-        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, JsonDeserializer.class);
+
+        // ErrorHandlingDeserializer wraps the actual deserializer
+        // If deserialization fails, it catches the error instead of crashing the consumer
+        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, ErrorHandlingDeserializer.class);
+        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ErrorHandlingDeserializer.class);
+
+        // Delegate deserializers (actual ones that do the work)
+        props.put(ErrorHandlingDeserializer.KEY_DESERIALIZER_CLASS, StringDeserializer.class);
+        props.put(ErrorHandlingDeserializer.VALUE_DESERIALIZER_CLASS, JsonDeserializer.class);
+
+        // JsonDeserializer settings
         props.put(JsonDeserializer.TRUSTED_PACKAGES, "uz.greenwhite.gateway.*");
 
         // Fetch tuning
@@ -93,6 +140,7 @@ public class KafkaConfig {
         factory.setConcurrency(concurrencyProperties.getMinConcurrency());
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL);
         factory.getContainerProperties().setIdleBetweenPolls(100);
+        factory.setCommonErrorHandler(kafkaErrorHandler());
 
         log.info("Request consumer factory created with initial concurrency: {}",
                 concurrencyProperties.getMinConcurrency());
@@ -108,6 +156,7 @@ public class KafkaConfig {
         factory.setConcurrency(concurrencyProperties.getMinConcurrency());
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL);
         factory.getContainerProperties().setIdleBetweenPolls(100);
+        factory.setCommonErrorHandler(kafkaErrorHandler());
 
         log.info("Response consumer factory created with initial concurrency: {}",
                 concurrencyProperties.getMinConcurrency());
@@ -123,6 +172,7 @@ public class KafkaConfig {
         factory.setConcurrency(1);
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL);
         factory.getContainerProperties().setIdleBetweenPolls(500);
+        factory.setCommonErrorHandler(kafkaErrorHandler());
 
         log.info("DLQ consumer factory created with concurrency: 1");
 

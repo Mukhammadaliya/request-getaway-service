@@ -123,7 +123,9 @@ public class RequestConsumer {
 
         ResponseMessage response;
         try {
-            response = httpRequestService.sendRequest(message).block();
+            response = httpRequestService.sendRequest(message)
+                    .block(java.time.Duration.ofMillis(
+                            retryProperties.getIntervalMs() * retryProperties.getMaxAttempts() + 60_000));
         } catch (Exception e) {
             httpSample.stop(metrics.getHttpRequestTimer());
 

@@ -26,10 +26,10 @@ public class OAuth2TokenRedisCache {
     private static final long MARGIN_MS = 15_000;
 
     /**
-     * Token olish: Redis cache → expired bo'lsa refresh → yo'q bo'lsa yangi olish
+     * Getting token: Redis cache → refresh expired → get new if not exists
      */
     public Token getToken(String providerName, ProviderProperties properties, OAuth2Client client) {
-        // 1. Redis'dan olish
+        // 1. Getting from Redis
         Token cached = getFromRedis(providerName);
 
         if (cached != null && !cached.isExpired()) {
@@ -37,21 +37,21 @@ public class OAuth2TokenRedisCache {
             return cached;
         }
 
-        // 2. Lock olish — faqat 1 instance refresh qiladi
+        // 2. Getting from Lock — only one instance will refresh
         if (!acquireLock(providerName)) {
             log.debug("Another instance is refreshing token: {}, waiting...", providerName);
             return waitForToken(providerName, cached);
         }
 
         try {
-            // 3. Double-check — lock olgandan keyin yana tekshirish
+            // 3. Double-check — check after getting lock
             Token doubleCheck = getFromRedis(providerName);
             if (doubleCheck != null && !doubleCheck.isExpired()) {
                 log.debug("OAuth2 token refreshed by another instance: {}", providerName);
                 return doubleCheck;
             }
 
-            // 4. Token olish yoki refresh
+            // 4. Getting toke or refresh
             Token newToken;
             if (cached != null && cached.refreshToken() != null) {
                 log.info("Refreshing OAuth2 token: {}", providerName);
@@ -66,7 +66,7 @@ public class OAuth2TokenRedisCache {
                 newToken = client.getAccessToken(properties);
             }
 
-            // 5. Redis'ga saqlash
+            // 5. Save to Redis
             saveToRedis(providerName, newToken);
             log.info("OAuth2 token saved to Redis: {}", providerName);
 
@@ -74,7 +74,7 @@ public class OAuth2TokenRedisCache {
 
         } catch (Exception e) {
             log.error("Failed to get/refresh OAuth2 token: {} - {}", providerName, e.getMessage());
-            // Cache'da eski token bo'lsa — uni qaytarish (expired bo'lsa ham)
+            // If old token exists in cache — return it as fallback (even if expired)
             if (cached != null) {
                 log.warn("Returning expired token as fallback: {}", providerName);
                 return cached;
@@ -125,7 +125,7 @@ public class OAuth2TokenRedisCache {
     }
 
     /**
-     * Boshqa instance token refresh qilayotganda — kutib, Redis'dan olish
+     * Waiting when another instance token refreshing, getting from Redis
      */
     private Token waitForToken(String providerName, Token fallback) {
         for (int i = 0; i < 5; i++) {
@@ -141,7 +141,7 @@ public class OAuth2TokenRedisCache {
             }
         }
 
-        // Timeout — fallback qaytarish
+        // Timeout — return fallback
         if (fallback != null) {
             log.warn("Wait timeout, returning fallback token: {}", providerName);
             return fallback;

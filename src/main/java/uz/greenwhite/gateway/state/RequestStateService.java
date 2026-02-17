@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
+import uz.greenwhite.gateway.config.RedisProperties;
 import uz.greenwhite.gateway.model.RequestState;
 import uz.greenwhite.gateway.model.enums.ErrorSource;
 import uz.greenwhite.gateway.model.enums.RequestStatus;
@@ -18,11 +19,10 @@ import java.util.concurrent.TimeUnit;
 public class RequestStateService {
 
     private final RedisTemplate<String, Object> redisTemplate;
+    private final RedisProperties redisProperties;
 
     private static final String STATE_PREFIX = "request:state:";
     private static final String LOCK_PREFIX = "request:lock:";
-    private static final long STATE_TTL_HOURS = 24;
-    private static final long LOCK_TTL_SECONDS = 300;
 
     // ==================== STATE OPERATIONS ====================
 
@@ -33,8 +33,10 @@ public class RequestStateService {
         String key = STATE_PREFIX + state.getCompositeId();
         state.setUpdatedAt(LocalDateTime.now());
 
-        redisTemplate.opsForValue().set(key, state, STATE_TTL_HOURS, TimeUnit.HOURS);
-        log.debug("State saved: {} -> {}", key, state.getStatus());
+        redisTemplate.opsForValue().set(key, state,
+                redisProperties.getStateTtlHours(), TimeUnit.HOURS);
+        log.debug("State saved: {} -> {} (TTL: {}h)", key, state.getStatus(),
+                redisProperties.getStateTtlHours());
     }
 
     /**
@@ -93,18 +95,30 @@ public class RequestStateService {
     }
 
     /**
-     * Increment attempt count
+     * Increment attempt count.
+     * If Redis is unavailable or state not found, returns Integer.MAX_VALUE
+     * to prevent infinite retry loops.
      */
     public int incrementAttempt(String compositeId) {
-        Optional<RequestState> stateOpt = getState(compositeId);
-        if (stateOpt.isPresent()) {
-            RequestState state = stateOpt.get();
-            state.setAttemptCount(state.getAttemptCount() + 1);
-            state.setUpdatedAt(LocalDateTime.now());
-            saveState(state);
-            return state.getAttemptCount();
+        try {
+            Optional<RequestState> stateOpt = getState(compositeId);
+            if (stateOpt.isPresent()) {
+                RequestState state = stateOpt.get();
+                state.setAttemptCount(state.getAttemptCount() + 1);
+                state.setUpdatedAt(LocalDateTime.now());
+                saveState(state);
+                return state.getAttemptCount();
+            }
+
+            log.warn("State not found for incrementAttempt: {}. " +
+                    "Returning MAX_VALUE to prevent infinite retry.", compositeId);
+            return Integer.MAX_VALUE;
+
+        } catch (Exception e) {
+            log.error("Redis error during incrementAttempt for {}: {}. " +
+                    "Returning MAX_VALUE to prevent infinite retry.", compositeId, e.getMessage());
+            return Integer.MAX_VALUE;
         }
-        return 0;
     }
 
     /**
@@ -112,7 +126,7 @@ public class RequestStateService {
      */
     public boolean isCompleted(String compositeId) {
         return getState(compositeId)
-                .map(state -> state.getStatus() == RequestStatus.DONE ||
+                .map(state -> state.getStatus() == RequestStatus.COMPLETED ||
                         state.getStatus() == RequestStatus.FAILED)
                 .orElse(false);
     }
@@ -135,7 +149,7 @@ public class RequestStateService {
         String key = LOCK_PREFIX + compositeId;
         Boolean acquired = redisTemplate.opsForValue()
                 .setIfAbsent(key, LocalDateTime.now().toString(),
-                        LOCK_TTL_SECONDS, TimeUnit.SECONDS);
+                        redisProperties.getLockTtlSeconds(), TimeUnit.SECONDS);
 
         if (Boolean.TRUE.equals(acquired)) {
             log.debug("Lock acquired: {}", compositeId);
@@ -163,11 +177,23 @@ public class RequestStateService {
     }
 
     /**
-     * Get current attempt count
+     * Get current attempt count.
+     * If Redis is unavailable or state not found, returns Integer.MAX_VALUE
+     * to prevent infinite retry loops.
      */
     public int getAttemptCount(String compositeId) {
-        return getState(compositeId)
-                .map(RequestState::getAttemptCount)
-                .orElse(0);
+        try {
+            return getState(compositeId)
+                    .map(RequestState::getAttemptCount)
+                    .orElseGet(() -> {
+                        log.warn("State not found for getAttemptCount: {}. " +
+                                "Returning MAX_VALUE to prevent infinite retry.", compositeId);
+                        return Integer.MAX_VALUE;
+                    });
+        } catch (Exception e) {
+            log.error("Redis error during getAttemptCount for {}: {}. " +
+                    "Returning MAX_VALUE to prevent infinite retry.", compositeId, e.getMessage());
+            return Integer.MAX_VALUE;
+        }
     }
 }

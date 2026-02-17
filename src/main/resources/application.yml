@@ -33,6 +33,9 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+      state-ttl-hours: 72
+      lock-ttl-seconds: 300
+
 
   # JDBC auto-config disabled
   autoconfigure:
@@ -92,6 +95,9 @@ gateway:
 
   # --- HTTP Client ---
   http:
+    endpoint-timeouts:
+      api.slow-service.com: 60000
+      api.fast-service.com: 5000
     connect-timeout-ms: 10000
     read-timeout-ms: 30000
     write-timeout-ms: 30000

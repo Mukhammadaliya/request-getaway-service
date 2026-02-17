@@ -6,18 +6,18 @@ import uz.greenwhite.gateway.oauth2.model.ProviderProperties;
 public interface OAuth2Client {
 
     /**
-     * Provider nomi — application.yml dagi "type" bilan mos kelishi kerak
-     * Masalan: "biruni", "google", "keycloak"
+     * Provider name — must match the "type" in application.yml
+     * Example: "biruni", "google", "keycloak"
      */
     String getName();
 
     /**
-     * Yangi access token olish (client_credentials grant)
+     * Get new access token (client_credentials grant)
      */
     Token getAccessToken(ProviderProperties properties);
 
     /**
-     * Mavjud token'ni refresh qilish (refresh_token grant)
+     * Refresh existing token (refresh_token grant)
      */
     Token refreshAccessToken(ProviderProperties properties, Token token);
 }

@@ -5,12 +5,12 @@ import uz.greenwhite.gateway.model.kafka.DlqMessage;
 public interface NotificationService {
 
     /**
-     * DLQ alert yuborish
+     * Send DLQ alert notification
      */
     void sendDlqAlert(DlqMessage message);
 
     /**
-     * Notification service faolmi?
+     * Is notification service active?
      */
     boolean isEnabled();
 }

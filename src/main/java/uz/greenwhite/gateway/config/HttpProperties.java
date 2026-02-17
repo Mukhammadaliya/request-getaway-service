@@ -6,6 +6,8 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
+import java.util.HashMap;
+import java.util.Map;
 
 @Slf4j
 @Getter
@@ -32,5 +34,31 @@ public class HttpProperties {
 
         log.info("HTTP client config: connect={}ms, read={}ms, write={}ms",
                 connectTimeoutMs, readTimeoutMs, writeTimeoutMs);
+    }
+
+    /**
+     * Per-endpoint timeout overrides in milliseconds.
+     * Key: domain or host (e.g., "api.example.com")
+     * Value: read timeout in ms
+     * If not found, falls back to readTimeoutMs.
+     *
+     * Example config:
+     *   gateway.http.endpoint-timeouts:
+     *     api.slow-service.com: 60000
+     *     api.fast-service.com: 5000
+     */
+    private Map<String, Integer> endpointTimeouts = new HashMap<>();
+
+    /**
+     * Get timeout for specific URL. Falls back to global readTimeoutMs.
+     */
+    public int getTimeoutForUrl(String url) {
+        try {
+            String host = java.net.URI.create(url).getHost();
+            if (host != null && endpointTimeouts.containsKey(host)) {
+                return endpointTimeouts.get(host);
+            }
+        } catch (Exception ignored) {}
+        return readTimeoutMs;
     }
 }
