@@ -20,13 +20,13 @@ jobs:
           cache: 'maven'
 
       - name: Build JAR
-        run: ./mvnw clean package -DskipTests -B
+        run: mvn clean package -DskipTests -B
 
       - name: Get version from pom.xml
         id: version
         run: |
-          VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout)
-          ARTIFACT=$(./mvnw help:evaluate -Dexpression=project.artifactId -q -DforceStdout)
+          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          ARTIFACT=$(mvn help:evaluate -Dexpression=project.artifactId -q -DforceStdout)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "artifact=$ARTIFACT" >> $GITHUB_OUTPUT
           echo "jar_name=$ARTIFACT-$VERSION.jar" >> $GITHUB_OUTPUT
