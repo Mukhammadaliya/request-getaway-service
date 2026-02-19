@@ -20,6 +20,7 @@ import uz.greenwhite.gateway.model.kafka.RequestMessage;
 import uz.greenwhite.gateway.model.kafka.ResponseMessage;
 import uz.greenwhite.gateway.state.RequestStateService;
 
+import java.time.LocalDateTime;
 import java.util.concurrent.CompletableFuture;
 
 @Slf4j
@@ -198,6 +199,15 @@ public class RequestConsumer {
                                         int httpStatus, String errorMessage, ErrorSource source) {
         log.error("E4: Request failed permanently: {} - status={}, error={}, source={}",
                 key, httpStatus, errorMessage, source);
+
+        ResponseMessage errorResponse = ResponseMessage.builder()
+                .companyId(message.getCompanyId())
+                .requestId(message.getRequestId())
+                .httpStatus(httpStatus)
+                .errorMessage(errorMessage)
+                .processedAt(LocalDateTime.now())
+                .build();
+        requestProducer.sendResponse(errorResponse);
 
         int attemptCount = requestStateService.getAttemptCount(key);
         DlqMessage dlqMessage = DlqMessage.from(

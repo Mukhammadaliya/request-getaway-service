@@ -121,7 +121,13 @@ gateway:
 
   # --- OAuth2 Providers (empty by default) ---
   oauth2:
-    providers: {}
+    providers:
+      supplier1176:
+        type: biruni
+        token-url: https://app3.greenwhite.uz/xtrade/security/oauth/token
+        client-id: E6587DCE827944D33A84CADBE228DA72
+        client-secret: 9E4D73C4EF8C05D2DA91326ADDE4BF3CDE6F63A0BBC8A492964B70F5A2FB4A8F589BA197104CD8BD5749F94EBB048115DB9E896EB860FC5F9B79677EAB8AEFA9
+        scope: read+write
 
   # --- Telegram Notifications (disabled by default) ---
   telegram:

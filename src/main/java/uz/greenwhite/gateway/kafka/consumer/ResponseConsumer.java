@@ -144,13 +144,17 @@ public class ResponseConsumer {
      * Build save request from response message
      */
     private ResponseSaveRequest buildSaveRequest(ResponseMessage message) {
-        ResponseSaveRequest.ResponseData responseData = null;
+        ResponseSaveRequest.ResponseData responseData;
 
         if (message.isSuccess()) {
             responseData = ResponseSaveRequest.ResponseData.builder()
                     .status(message.getHttpStatus())
-                    .contentType(message.getContentType())
                     .body(message.getBody())
+                    .build();
+        } else {
+            responseData = ResponseSaveRequest.ResponseData.builder()
+                    .status(message.getHttpStatus())
+                    .body(message.getErrorMessage())
                     .build();
         }
 

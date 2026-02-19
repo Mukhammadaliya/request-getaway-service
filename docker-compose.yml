@@ -63,25 +63,25 @@ services:
   # ==========================================
   # KAFKA TOPICS INIT
   # ==========================================
-  kafka-init:
-    image: redpandadata/redpanda:v24.1.1
-    container_name: kafka-init
-    depends_on:
-      redpanda:
-        condition: service_healthy
-    entrypoint: ["/bin/bash", "-c"]
-    command: |
-      "
-      echo 'Creating Kafka topics...'
-      
-      rpk topic create bmb.request.new --brokers redpanda:9092 --partitions 10 --replicas 1
-      rpk topic create bmb.request.response --brokers redpanda:9092 --partitions 10 --replicas 1
-      rpk topic create bmb.request.callback --brokers redpanda:9092 --partitions 10 --replicas 1
-      rpk topic create bmb.request.dlq --brokers redpanda:9092 --partitions 3 --replicas 1
-      
-      echo 'Topics created:'
-      rpk topic list --brokers redpanda:9092
-      "
+#  kafka-init:
+#    image: redpandadata/redpanda:v24.1.1
+#    container_name: kafka-init
+#    depends_on:
+#      redpanda:
+#        condition: service_healthy
+#    entrypoint: ["/bin/bash", "-c"]
+#    command: |
+#      "
+#      echo 'Creating Kafka topics...'
+#
+#      rpk topic create bmb.request.new --brokers redpanda:9092 --partitions 10 --replicas 1
+#      rpk topic create bmb.request.response --brokers redpanda:9092 --partitions 10 --replicas 1
+#      rpk topic create bmb.request.callback --brokers redpanda:9092 --partitions 10 --replicas 1
+#      rpk topic create bmb.request.dlq --brokers redpanda:9092 --partitions 3 --replicas 1
+#
+#      echo 'Topics created:'
+#      rpk topic list --brokers redpanda:9092
+#      "
 
   # ==========================================
   # REDIS
