@@ -3,16 +3,16 @@ global:
 
 route:
   group_by: ['alertname', 'severity']
-  group_wait: 30s
-  group_interval: 5m
-  repeat_interval: 4h
+  group_wait: 10s
+  group_interval: 1m
+  repeat_interval: 10m
   receiver: 'telegram-alerts'
 
   routes:
     - match:
         severity: critical
-      group_wait: 10s
-      repeat_interval: 1h
+      group_wait: 5s
+      repeat_interval: 10m
       receiver: 'telegram-alerts'
 
 receivers:
@@ -24,17 +24,12 @@ receivers:
         send_resolved: true
         parse_mode: 'HTML'
         message: |
-          {{ if eq .Status "firing" }}🔴 <b>ALERT FIRING</b>{{ else }}✅ <b>RESOLVED</b>{{ end }}
-
           {{ range .Alerts }}
-          ━━━━━━━━━━━━━━━━━━━━━
-          <b>{{ .Labels.alertname }}</b>
-          <b>Severity:</b> {{ .Labels.severity }}
-          <b>Stage:</b> {{ .Labels.stage }}
-          <b>Status:</b> {{ .Status }}
-
-          {{ .Annotations.summary }}
-          {{ .Annotations.description }}
-
-          {{ if eq .Status "resolved" }}🕐 Resolved at: {{ .EndsAt.Format "2006-01-02 15:04:05" }}{{ end }}
+          {{ if eq .Status "firing" }}🔴 ALERT
+          
+          MQ server: {{ .Labels.alertname }}:
+          {{ .Annotations.summary }}. {{ .Annotations.description }}{{ else }}✅ RESOLVED
+          
+          MQ server: {{ .Labels.alertname }}:
+          {{ .Annotations.summary }}. {{ .Annotations.description }}{{ end }}
           {{ end }}

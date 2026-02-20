@@ -37,7 +37,10 @@ gateway:
 
   # --- Telegram (disabled in dev) ---
   telegram:
-    enabled: false
+    enabled: true
+    bot-token: "8318506270:AAGzEwBW46VE-_K_Z__Gcuh8MiPOvBdaVMM"
+    chat-id: -1002508752139
+    message-thread-id: 3716
 
 # Development-specific logging
 logging:
