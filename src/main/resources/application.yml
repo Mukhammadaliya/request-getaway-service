@@ -1,9 +1,9 @@
 # ============================================================
-# REQUEST GATEWAY SERVICE — Base Configuration
+# REQUEST GATEWAY SERVICE — Unified Configuration
 # ============================================================
-# Default profile: dev
-# Available profiles: dev, prod
-# Run with: java -jar gateway.jar --spring.profiles.active=prod
+# All values use: ${ENV_VAR:default_value}
+# Dev: default values work out of the box
+# Prod: set OS environment variables to override
 # ============================================================
 
 spring:
@@ -11,10 +11,7 @@ spring:
     timeout-per-shutdown-phase: 30s
   application:
     name: request-gateway-service
-  profiles:
-    active: ${SPRING_PROFILE:dev}  # Default to dev if not specified
 
-  # Kafka — Spring auto-config
   kafka:
     bootstrap-servers: ${gateway.kafka.bootstrap-servers}
     consumer:
@@ -28,16 +25,13 @@ spring:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
 
-  # Redis
   data:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
-      state-ttl-hours: 72
-      lock-ttl-seconds: 300
+      state-ttl-hours: ${REDIS_STATE_TTL_HOURS:72}
+      lock-ttl-seconds: ${REDIS_LOCK_TTL_SECONDS:300}
 
-
-  # JDBC auto-config disabled
   autoconfigure:
     exclude:
       - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
@@ -64,72 +58,68 @@ management:
       show-details: always
 
 # ============================================================
-# GATEWAY BASE CONFIGURATION
-# Profile-specific overrides in application-{profile}.yml
+# GATEWAY CONFIGURATION
 # ============================================================
 gateway:
 
-  # --- Kafka (defaults - can be overridden by profiles) ---
+  # --- Kafka ---
   kafka:
-    bootstrap-servers: localhost:19092
-    group-id: gateway-service-group
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:19092}
+    group-id: ${KAFKA_GROUP_ID:gateway-service-group}
     topics:
-      request-new: gateway.request.new
-      request-response: gateway.request.response
-      request-dlq: gateway.request.dlq
+      request-new: ${KAFKA_TOPIC_REQUEST:gateway.request.new}
+      request-response: ${KAFKA_TOPIC_RESPONSE:gateway.request.response}
+      request-dlq: ${KAFKA_TOPIC_DLQ:gateway.request.dlq}
 
-  # --- Data Source (defaults) ---
+  # --- Data Source (Oracle/Biruni) ---
   source:
-    base-url: http://localhost:8080
-    username: admin
-    password: changeme
-    request-pull-uri: /api/requests/pull
-    response-save-uri: /api/requests/save
-    connection-timeout: 60
+    base-url: ${SOURCE_BASE_URL:https://app3.greenwhite.uz/x24}
+    username: ${SOURCE_USERNAME:admin@head}
+    password: ${SOURCE_PASSWORD:greenwhite}
+    request-pull-uri: ${SOURCE_PULL_URI:/b/biruni/bmb/requests$pull}
+    response-save-uri: ${SOURCE_SAVE_URI:/b/biruni/bmb/requests$save}
+    oauth2-provider-uri: ${SOURCE_OAUTH2_PROVIDER_URI:/b/biruni/bmb/requests$get_oauth_provider_data}
+    connection-timeout: ${SOURCE_TIMEOUT:60}
 
   # --- Polling ---
   polling:
-    enabled: true
-    interval-ms: 5000
-    batch-size: 100
+    enabled: ${POLLING_ENABLED:true}
+    interval-ms: ${POLLING_INTERVAL_MS:5000}
+    batch-size: ${POLLING_BATCH_SIZE:100}
 
   # --- HTTP Client ---
   http:
-    endpoint-timeouts:
-      api.slow-service.com: 60000
-      api.fast-service.com: 5000
-    connect-timeout-ms: 10000
-    read-timeout-ms: 30000
-    write-timeout-ms: 30000
+    connect-timeout-ms: ${HTTP_CONNECT_TIMEOUT:10000}
+    read-timeout-ms: ${HTTP_READ_TIMEOUT:30000}
+    write-timeout-ms: ${HTTP_WRITE_TIMEOUT:30000}
+    endpoint-timeouts: {}
 
   # --- Retry ---
   retry:
-    max-attempts: 3
-    interval-ms: 3000
-    retryable-statuses: 408,429,500,502,503,504
+    max-attempts: ${RETRY_MAX_ATTEMPTS:3}
+    interval-ms: ${RETRY_INTERVAL_MS:3000}
+    retryable-statuses: ${RETRY_STATUSES:408,429,500,502,503,504}
 
   # --- Dynamic Concurrency ---
   concurrency:
-    min-concurrency: 10
-    max-concurrency: 15
-    monitor-interval-ms: 10000
-    scale-up-threshold: 50
-    scale-down-threshold: 10
-    scale-step: 2
-    scale-cooldown-ms: 30000
-    topic-partitions: 10
+    min-concurrency: ${CONCURRENCY_MIN:10}
+    max-concurrency: ${CONCURRENCY_MAX:15}
+    monitor-interval-ms: ${CONCURRENCY_MONITOR_INTERVAL:10000}
+    scale-up-threshold: ${CONCURRENCY_SCALE_UP:50}
+    scale-down-threshold: ${CONCURRENCY_SCALE_DOWN:10}
+    scale-step: ${CONCURRENCY_SCALE_STEP:2}
+    scale-cooldown-ms: ${CONCURRENCY_COOLDOWN:30000}
+    topic-partitions: ${KAFKA_PARTITIONS:10}
 
-  # --- Telegram Notifications (disabled by default) ---
+  # --- Telegram Notifications ---
   telegram:
-    enabled: false
-    bot-token: ""
-    chat-id: 0
-    message-thread-id: null
-    connect-timeout-ms: 5000
-    read-timeout-ms: 5000
+    enabled: ${TELEGRAM_ENABLED:true}
+    bot-token: ${TELEGRAM_BOT_TOKEN:8318506270:AAGzEwBW46VE-_K_Z__Gcuh8MiPOvBdaVMM}
+    chat-id: ${TELEGRAM_CHAT_ID:-1002508752139}
+    message-thread-id: ${TELEGRAM_MESSAGE_THREAD_ID:3716}
 
 # ============================================================
-# CIRCUIT BREAKER (Resilience4j)
+# CIRCUIT BREAKER
 # ============================================================
 resilience4j:
   circuitbreaker:
@@ -142,3 +132,19 @@ resilience4j:
         slow-call-duration-threshold: 10s
         slow-call-rate-threshold: 50
         automatic-transition-from-open-to-half-open-enabled: true
+
+# ============================================================
+# LOGGING
+# ============================================================
+logging:
+  level:
+    root: INFO
+    uz.greenwhite.gateway: ${LOG_LEVEL:DEBUG}
+    org.apache.kafka.clients.producer.ProducerConfig: WARN
+    org.apache.kafka.clients.consumer.ConsumerConfig: WARN
+    org.apache.kafka.clients.admin.AdminClientConfig: WARN
+    org.apache.kafka: WARN
+    org.springframework.kafka.listener: INFO
+    org.apache.kafka.clients.Metadata: INFO
+  pattern:
+    console: "%d{HH:mm:ss.SSS} %-5level [%15.15thread] %-40.40logger{39} : %msg%n"
