@@ -54,16 +54,6 @@ gateway:
     scale-cooldown-ms: ${CONCURRENCY_COOLDOWN:30000}
     topic-partitions: ${KAFKA_PARTITIONS:10}
 
-  # --- OAuth2 (from env vars - JSON format) ---
-  oauth2:
-    providers:
-      smartup:
-        type: ${OAUTH2_SMARTUP_TYPE:biruni}
-        token-url: ${OAUTH2_SMARTUP_TOKEN_URL}
-        client-id: ${OAUTH2_SMARTUP_CLIENT_ID}
-        client-secret: ${OAUTH2_SMARTUP_CLIENT_SECRET}
-        scope: ${OAUTH2_SMARTUP_SCOPE:read+write}
-
   # --- Telegram ---
   telegram:
     enabled: ${TELEGRAM_ENABLED:false}

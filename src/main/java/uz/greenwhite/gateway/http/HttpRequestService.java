@@ -166,7 +166,7 @@ public class HttpRequestService {
         }
 
         try {
-            Token token = oAuth2ProviderService.getToken(request.getOauth2Provider());
+            Token token = oAuth2ProviderService.getToken(request.getOauth2Provider(), request.getCompanyId());
             headers.put(HttpHeaders.AUTHORIZATION, token.getAuthorizationHeader());
             log.debug("OAuth2 Authorization header added for provider: {}", request.getOauth2Provider());
         } catch (Exception e) {

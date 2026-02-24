@@ -23,17 +23,8 @@ gateway:
     password: greenwhite
     request-pull-uri: /b/biruni/bmb/requests$pull
     response-save-uri: /b/biruni/bmb/requests$save
+    oauth2-provider-uri: /b/biruni/bmb/requests$get_oauth_provider_data
     connection-timeout: 60
-
-  # --- OAuth2 Providers (Smartup) ---
-  oauth2:
-    providers:
-      smartup:
-        type: biruni
-        token-url: http://localhost:8080/b6/security/oauth/token
-        client-id: your-client-id
-        client-secret: your-client-secret
-        scope: read+write
 
   # --- Telegram (disabled in dev) ---
   telegram:

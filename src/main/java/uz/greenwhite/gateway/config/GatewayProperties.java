@@ -43,4 +43,9 @@ public class GatewayProperties {
      * Connection timeout in seconds
      */
     private int connectionTimeout = 60;
+
+    /**
+     * URI for fetching OAuth2 provider credentials from data source
+     */
+    private String oauth2ProviderUri;
 }
