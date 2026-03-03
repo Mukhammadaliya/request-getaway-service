@@ -148,7 +148,7 @@ public class RequestConsumer {
         // 4. Handle response
         if (response != null && response.isSuccess()) {
             metrics.getHttpSuccess().increment();
-            handleSuccess(key, response);
+            handleSuccess(key, message, response);
         } else {
             // ===== E4: Record HTTP error by status code =====
             int httpStatus = response != null ? response.getHttpStatus() : 0;
@@ -157,10 +157,30 @@ public class RequestConsumer {
         }
     }
 
-    private void handleSuccess(String key, ResponseMessage response) {
-        requestProducer.sendResponse(response);
-        requestStateService.updateStatus(key, RequestStatus.COMPLETED);
-        log.info("Request processed successfully: {}", key);
+    private void handleSuccess(String key, RequestMessage request, ResponseMessage response) {
+        try {
+            requestProducer.sendResponse(response).get(10, java.util.concurrent.TimeUnit.SECONDS);
+            requestStateService.updateStatus(key, RequestStatus.COMPLETED);
+            log.info("Request processed successfully: {}", key);
+        } catch (Exception e) {
+            log.error("E4: Failed to send response to Kafka for {}: {}", key, e.getMessage());
+
+            // RecordTooLargeException yoki boshqa Kafka xatolari uchun DLQ ga yuborish
+            DlqMessage dlqMessage = DlqMessage.builder()
+                    .companyId(response.getCompanyId())
+                    .requestId(response.getRequestId())
+                    .originalTopic(kafkaProperties.getTopics().getRequestResponse())
+                    .failureReason("Response too large for Kafka: " + e.getMessage())
+                    .errorSource("KAFKA")
+                    .httpStatus(response.getHttpStatus())
+                    .attemptCount(1)
+                    .url(request.getMethod() + " " + request.getBaseUrl() + (request.getUri() != null ? request.getUri() : ""))
+                    .failedAt(java.time.LocalDateTime.now())
+                    .build();
+
+            requestProducer.sendToDlq(dlqMessage);
+            requestStateService.updateStatus(key, RequestStatus.FAILED);
+        }
     }
 
     private void handleFailedResponse(String key, RequestMessage message, ResponseMessage response) {
