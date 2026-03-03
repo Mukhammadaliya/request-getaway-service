@@ -21,9 +21,13 @@ spring:
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
         spring.json.trusted.packages: "*"
+        fetch.max.bytes: "10485760"
+        max.partition.fetch.bytes: "10485760"
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        max.request.size: "10485760"
 
   data:
     redis:
