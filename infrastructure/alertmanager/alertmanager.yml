@@ -17,19 +17,6 @@ route:
 
 receivers:
   - name: 'telegram-alerts'
-    telegram_configs:
-      - bot_token: '8318506270:AAGzEwBW46VE-_K_Z__Gcuh8MiPOvBdaVMM'
-        chat_id: -1002508752139
-        message_thread_id: 3716
-        send_resolved: true
-        parse_mode: 'HTML'
-        message: |
-          {{ range .Alerts }}
-          {{ if eq .Status "firing" }}🔴 ALERT
-          
-          MQ server: {{ .Labels.alertname }}:
-          {{ .Annotations.summary }}. {{ .Annotations.description }}{{ else }}✅ RESOLVED
-          
-          MQ server: {{ .Labels.alertname }}:
-          {{ .Annotations.summary }}. {{ .Annotations.description }}{{ end }}
-          {{ end }}
+    # Telegram disabled - using dummy webhook to silence
+    webhook_configs:
+      - url: 'http://127.0.0.1:5555/noop'
